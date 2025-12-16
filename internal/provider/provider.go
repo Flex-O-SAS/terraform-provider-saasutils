@@ -43,6 +43,8 @@ func (*stringFunctionsProvider) DataSources(_ context.Context) []func() datasour
 func (*stringFunctionsProvider) Functions(_ context.Context) []func() function.Function {
 	return []func() function.Function{
 		NewICaseAsgIdFunction,
+		NewCustomersConfigFunction,
+		NewCustomersSecretsFunction,
 	}
 }
 func (p *stringFunctionsProvider) Resources(_ context.Context) []func() resource.Resource {
