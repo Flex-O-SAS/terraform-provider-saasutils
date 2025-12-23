@@ -115,7 +115,7 @@ func TestCustomersConfig(t *testing.T) {
 	})
 }
 
-func TestCustomersConfigWithInheritance(t *testing.T) {
+func TestCustomersConfigWithSecretsFrom(t *testing.T) {
 	resource.UnitTest(t, resource.TestCase{
 		TerraformVersionChecks: []tfversion.TerraformVersionCheck{
 			tfversion.SkipBelow(version.Must(version.NewVersion("1.8.0"))),
@@ -140,11 +140,11 @@ func TestCustomersConfigWithInheritance(t *testing.T) {
 						derived = {
 							name        = "Derived Customer"
 							products    = ["theproduct"]
-							secretsFrom = "base"  # Inherit from base
+							secretsFrom = "base"  # Points to base for secrets only
 							product_config = {
 								theproduct = {
 									features = {
-										feat2 = true  # Add feat2
+										feat2 = true  # Only feat2, NOT feat1
 									}
 								}
 							}
@@ -176,17 +176,19 @@ func TestCustomersConfigWithInheritance(t *testing.T) {
 				}
 				`,
 				ConfigStateChecks: []statecheck.StateCheck{
+					// secretsFrom sets secret_module_name to point to base
 					statecheck.ExpectKnownOutputValue("derived_customer",
 						knownvalue.MapPartial(map[string]knownvalue.Check{
 							"secret_module_name": knownvalue.StringExact("base"),
 						}),
 					),
+					// secretsFrom does NOT inherit features - only feat2 should be enabled
 					statecheck.ExpectKnownOutputValue("derived_product",
 						knownvalue.MapPartial(map[string]knownvalue.Check{
 							"theproduct": knownvalue.MapPartial(map[string]knownvalue.Check{
 								"features": knownvalue.MapPartial(map[string]knownvalue.Check{
-									"feat1": knownvalue.Bool(true),
-									"feat2": knownvalue.Bool(true),
+									"feat1": knownvalue.Bool(false), // NOT inherited
+									"feat2": knownvalue.Bool(true),  // Only this one
 								}),
 							}),
 						}),
