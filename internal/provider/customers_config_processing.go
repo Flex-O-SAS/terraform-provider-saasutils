@@ -29,27 +29,14 @@ func computeCustomerInheritance(customers map[string]interface{}) (map[string]in
 		secretModuleName := name
 		if secretsFrom != "" {
 			secretModuleName = secretsFrom
-		}
-
-		var mergedProductConfig map[string]interface{}
-		if secretsFrom != "" {
-			parentCustomer, exists := customers[secretsFrom]
-			if !exists {
+			if _, exists := customers[secretsFrom]; !exists {
 				return nil, fmt.Errorf("customer '%s' references non-existent secretsFrom customer '%s'", key, secretsFrom)
 			}
-			parentMap, ok := parentCustomer.(map[string]interface{})
-			if !ok {
-				return nil, fmt.Errorf("parent customer '%s' is not a map", secretsFrom)
-			}
-			parentProductConfig := getMap(parentMap, "product_config")
-			mergedProductConfig = mergeMaps(parentProductConfig, productConfig)
-		} else {
-			mergedProductConfig = mergeMaps(make(map[string]interface{}), productConfig)
 		}
 
 		resultCustomer := maps.Clone(customerMap)
 		resultCustomer["secret_module_name"] = secretModuleName
-		resultCustomer["product_config"] = mergedProductConfig
+		resultCustomer["product_config"] = productConfig
 
 		result[key] = resultCustomer
 	}
