@@ -5,12 +5,16 @@ package provider
 
 import (
 	"context"
+	"time"
+
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/function"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"terraform-provider-saasutils/internal/ckboxapi"
 )
 
 var _ provider.ProviderWithFunctions = &stringFunctionsProvider{}
@@ -23,6 +27,13 @@ func New(version string) func() provider.Provider {
 
 type stringFunctionsProvider struct {
 	version string
+
+	client *ckboxapi.APIClient
+}
+
+type providerConfigModel struct {
+	Email    types.String `tfsdk:"email"`
+	Password types.String `tfsdk:"password"`
 }
 
 func (p *stringFunctionsProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -32,13 +43,55 @@ func (p *stringFunctionsProvider) Metadata(ctx context.Context, req provider.Met
 }
 
 func (p *stringFunctionsProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
-	resp.Schema = schema.Schema{}
+	resp.Schema = schema.Schema{
+		Attributes: map[string]schema.Attribute{
+			"email": schema.StringAttribute{
+				Optional: true,
+			},
+			"password": schema.StringAttribute{
+				Optional: true,
+			},
+		},
+	}
 }
 
-func (*stringFunctionsProvider) Configure(_ context.Context, _ provider.ConfigureRequest, _ *provider.ConfigureResponse) {
+func (p *stringFunctionsProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
+	p.client = ckboxapi.NewCkboxClient("https://portal-api.ckeditor.com/v1", 60*time.Second)
+
+	var config providerConfigModel
+
+	diags := req.Config.Get(ctx, &config)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if !config.Email.IsNull() && !config.Password.IsNull() {
+		tflog.Debug(ctx, "Authenticating CKBox client")
+
+		_, err := p.client.Authenticate(
+			ctx,
+			config.Email.ValueString(),
+			config.Password.ValueString(),
+		)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Authentication failed",
+				err.Error(),
+			)
+			return
+		}
+	}
+
+	// To provide the client in all the resources/datasources that needs it
+	resp.ResourceData = p.client
+	resp.DataSourceData = p.client
 }
+
 func (*stringFunctionsProvider) DataSources(_ context.Context) []func() datasource.DataSource {
-	return nil
+	return []func()  datasource.DataSource{
+		NewCkboxEnvDataSource,
+	}
 }
 func (*stringFunctionsProvider) Functions(_ context.Context) []func() function.Function {
 	return []func() function.Function{
@@ -48,5 +101,8 @@ func (*stringFunctionsProvider) Functions(_ context.Context) []func() function.F
 	}
 }
 func (p *stringFunctionsProvider) Resources(_ context.Context) []func() resource.Resource {
-	return nil
+	return []func() resource.Resource{
+		NewCkboxEnvResource,
+		NewCkboxAccessKeyResource,
+	}
 }
