@@ -5,16 +5,15 @@ package provider
 
 import (
 	"context"
-	"time"
-
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/function"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"terraform-provider-saasutils/internal/ckboxapi"
+	"time"
 )
 
 var _ provider.ProviderWithFunctions = &stringFunctionsProvider{}
@@ -32,6 +31,7 @@ type stringFunctionsProvider struct {
 }
 
 type providerConfigModel struct {
+	BaseURL  types.String `tfsdk:"base_url"`
 	Email    types.String `tfsdk:"email"`
 	Password types.String `tfsdk:"password"`
 }
@@ -45,6 +45,9 @@ func (p *stringFunctionsProvider) Metadata(ctx context.Context, req provider.Met
 func (p *stringFunctionsProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"base_url": schema.StringAttribute{
+				Optional: true,
+			},
 			"email": schema.StringAttribute{
 				Optional: true,
 			},
@@ -56,11 +59,16 @@ func (p *stringFunctionsProvider) Schema(_ context.Context, _ provider.SchemaReq
 }
 
 func (p *stringFunctionsProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
-	p.client = ckboxapi.NewCkboxClient("https://portal-api.ckeditor.com/v1", 60*time.Second)
-
 	var config providerConfigModel
 
 	diags := req.Config.Get(ctx, &config)
+
+	baseURL := "https://portal-api.ckeditor.com/v1"
+	if !config.BaseURL.IsNull() && config.BaseURL.ValueString() != "" {
+		baseURL = config.BaseURL.ValueString()
+	}
+	p.client = ckboxapi.NewCkboxClient(baseURL, 60*time.Second)
+
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -89,7 +97,7 @@ func (p *stringFunctionsProvider) Configure(ctx context.Context, req provider.Co
 }
 
 func (*stringFunctionsProvider) DataSources(_ context.Context) []func() datasource.DataSource {
-	return []func()  datasource.DataSource{
+	return []func() datasource.DataSource{
 		NewCkboxEnvDataSource,
 	}
 }

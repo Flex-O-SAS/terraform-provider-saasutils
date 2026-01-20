@@ -16,10 +16,7 @@ resource "saasutils_ckbox_env" "example" {
   name = "example"
 }
 
-# data "saasutils_ckbox_env" "example" {
-#   name = "test"
-# }
-
-# output "env" {
-#   value = saasutils_ckbox_env.example.id
-# }
+resource "saasutils_ckbox_access_key" "example" {
+    env_id = saasutils_ckbox_env.example.id
+    name = "example"
+}

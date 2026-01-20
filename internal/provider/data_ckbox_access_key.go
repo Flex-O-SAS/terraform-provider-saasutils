@@ -1,11 +1,12 @@
 package provider
+
 import (
 	"context"
-	"github.com/hashicorp/terraform-plugin-framework/datasource"
-	"terraform-provider-saasutils/internal/ckboxapi"
-	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"fmt"
+	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"terraform-provider-saasutils/internal/ckboxapi"
 )
 
 var _ datasource.DataSource = &dataCkboxAccessKey{}
@@ -23,19 +24,19 @@ func (d *dataCkboxAccessKey) Metadata(ctx context.Context, req datasource.Metada
 }
 
 func (d *dataCkboxAccessKey) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
-    resp.Schema = schema.Schema{
-        Attributes: map[string]schema.Attribute{
-            "name": schema.StringAttribute{
-                Required: true,
-            },
+	resp.Schema = schema.Schema{
+		Attributes: map[string]schema.Attribute{
+			"name": schema.StringAttribute{
+				Required: true,
+			},
 			"env_id": schema.StringAttribute{
 				Required: true,
 			},
-            "id": schema.StringAttribute{
-                Computed: true,
-            },
-        },
-    }
+			"id": schema.StringAttribute{
+				Computed: true,
+			},
+		},
+	}
 }
 
 func (d *dataCkboxAccessKey) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
@@ -70,15 +71,13 @@ func (d *dataCkboxAccessKey) Read(ctx context.Context, req datasource.ReadReques
 	)
 
 	if err != nil {
-		resp.Diagnostics.AddError("Unable to read Ckbox Access key for env : " + state.EnvId.ValueString(), err.Error())
+		resp.Diagnostics.AddError("Unable to read Ckbox Access key for env : "+state.EnvId.ValueString(), err.Error())
 		return
 	}
 
-	state.ID	= types.StringValue(accessKey.Value)
-	state.EnvId	= types.StringValue(state.EnvId.ValueString())
-	state.Name	= types.StringValue(accessKey.Name)
+	state.ID = types.StringValue(accessKey.Value)
+	state.EnvId = types.StringValue(state.EnvId.ValueString())
+	state.Name = types.StringValue(accessKey.Name)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
-
-

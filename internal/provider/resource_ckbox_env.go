@@ -4,19 +4,18 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"terraform-provider-saasutils/internal/ckboxapi"
+
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"terraform-provider-saasutils/internal/ckboxapi"
 )
 
 var (
 	_ resource.Resource              = &resourceCkboxEnv{}
 	_ resource.ResourceWithConfigure = &resourceCkboxEnv{}
-	_ resource.ResourceWithImportState  = &resourceCkboxEnv{}
 )
 
 func NewCkboxEnvResource() resource.Resource {
@@ -27,7 +26,6 @@ type resourceCkboxEnv struct {
 	client *ckboxapi.APIClient
 }
 
-// Modèle Terraform pour la ressource
 type ckboxEnvModel struct {
 	ID   types.String `tfsdk:"id"`
 	Name types.String `tfsdk:"name"`
@@ -70,12 +68,6 @@ func (r *resourceCkboxEnv) Configure(_ context.Context, req resource.ConfigureRe
 	r.client = client
 }
 
-func (r *resourceCkboxEnv) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resp.Diagnostics.Append(
-		resp.State.SetAttribute(ctx, path.Root("name"), req.ID)...,
-	)
-}
-
 func (r *resourceCkboxEnv) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan ckboxEnvModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -85,8 +77,8 @@ func (r *resourceCkboxEnv) Create(ctx context.Context, req resource.CreateReques
 
 	region := "us-east-1"
 	env, err := r.client.CreateCkboxEnv(
-		ctx, 
-		plan.Name.ValueString(), 
+		ctx,
+		plan.Name.ValueString(),
 		region,
 	)
 
@@ -95,8 +87,8 @@ func (r *resourceCkboxEnv) Create(ctx context.Context, req resource.CreateReques
 	}
 
 	state := ckboxEnvModel{
-		ID:     types.StringValue(env.Id),
-		Name:   types.StringValue(env.Name),
+		ID:   types.StringValue(env.Id),
+		Name: types.StringValue(env.Name),
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)

@@ -2,11 +2,11 @@ package provider
 
 import (
 	"context"
-	"github.com/hashicorp/terraform-plugin-framework/datasource"
-	"terraform-provider-saasutils/internal/ckboxapi"
-	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"fmt"
+	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"terraform-provider-saasutils/internal/ckboxapi"
 )
 
 // Ensure the implementation satisfies the desired interfaces.
@@ -25,16 +25,16 @@ func (d *dataCkboxEnv) Metadata(ctx context.Context, req datasource.MetadataRequ
 }
 
 func (d *dataCkboxEnv) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
-    resp.Schema = schema.Schema{
-        Attributes: map[string]schema.Attribute{
-            "name": schema.StringAttribute{
-                Required: true,
-            },
-            "id": schema.StringAttribute{
-                Computed: true,
-            },
-        },
-    }
+	resp.Schema = schema.Schema{
+		Attributes: map[string]schema.Attribute{
+			"name": schema.StringAttribute{
+				Required: true,
+			},
+			"id": schema.StringAttribute{
+				Computed: true,
+			},
+		},
+	}
 }
 
 func (d *dataCkboxEnv) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {

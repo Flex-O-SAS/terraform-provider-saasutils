@@ -5,19 +5,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"io"
 	"net/http"
 	"time"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 type APIClient struct {
 	baseURL        string
 	http           *http.Client
 	defaultHeaders map[string]string
-
-	email    string
-	password string
 }
 
 func NewCkboxClient(baseURL string, timeout time.Duration) *APIClient {
@@ -51,7 +48,6 @@ func (c *APIClient) GetHeader(key string) (string, bool) {
 	v, ok := c.defaultHeaders[key]
 	return v, ok
 }
-
 
 // Do envoie une requête HTTP et retourne le body brut + status code.
 func (c *APIClient) Do(
@@ -102,8 +98,6 @@ func (c *APIClient) Do(
 	return respBody, resp.StatusCode, nil
 }
 
-// CallInto: payload -> JSON -> Do -> decode JSON dans `out`
-// `out` doit être un pointeur vers struct (ex: &AuthenticateRespBody{})
 func (c *APIClient) CallInto(
 	ctx context.Context,
 	method, path string,
