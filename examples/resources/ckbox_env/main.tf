@@ -8,19 +8,13 @@ terraform {
 }
 
 provider "saasutils" {
-  email    = "platform.team@saas-office.com"
-  password = "P8T-oUtKTJr8-v8ZPZELD999yrZ3uX39sPtMJVcudp"
+  email    = "example@example.com"
+  password = "password"
 }
 
 resource "saasutils_ckbox_env" "example" {
-  name = "test"
+  name = "example"
 }
-
-resource "saasutils_ckbox_access_key" "example" {
-  env_id  = saasutils_ckbox_env.example
-  name    = "Salut"
-}
-
 
 # data "saasutils_ckbox_env" "example" {
 #   name = "test"

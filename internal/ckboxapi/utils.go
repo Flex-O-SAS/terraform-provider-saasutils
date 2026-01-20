@@ -2,8 +2,8 @@ package ckboxapi
 
 import (
 	"context"
-	"net/http"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"net/http"
 )
 
 type AuthenticateRespBody struct {
@@ -11,8 +11,8 @@ type AuthenticateRespBody struct {
 }
 
 type AuthenticateReqBody struct {
-	Email 		string `json:"email"`
-	Password 	string `json:"password"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
 func (c *APIClient) Authenticate(ctx context.Context, email string, password string) (string, error) {
@@ -45,7 +45,7 @@ func (c *APIClient) Authenticate(ctx context.Context, email string, password str
 
 func (c *APIClient) EnsureHeader() {
 	_, isHere := c.GetHeader("organizationid")
-	if (!isHere) {
+	if !isHere {
 		c.SetHeader("organizationid", "b9ee06c380fb")
 	}
 }

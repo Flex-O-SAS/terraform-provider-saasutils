@@ -2,24 +2,23 @@ package ckboxapi
 
 import (
 	"context"
-	"fmt"
 	"encoding/json"
+	"fmt"
+
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
-
 
 func (c *APIClient) ReadCkboxAccessKey(ctx context.Context, name, envId string) (*CkboxAccesKey, error) {
 	tflog.Debug(ctx, "ReadCkboxAccessKey called", map[string]any{"name": name, "envId": envId})
 
 	var respBody CkboxReadAccesKeyRespBody
-	
 	c.SetHeader("organizationid", "b9ee06c380fb")
 	defer c.UnsetHeader("organizationid")
 
 	_, err := c.CallInto(
 		ctx,
 		"GET",
-		"/subscriptions/2d681144861c/environments/" + envId + "/credentials",
+		"/subscriptions/2d681144861c/environments/"+envId+"/credentials",
 		nil,
 		&respBody,
 	)
@@ -51,7 +50,7 @@ func (c *APIClient) CreateCkboxAccessKey(ctx context.Context, name, envId string
 	_, err := c.CallInto(
 		ctx,
 		"POST",
-		"/subscriptions/2d681144861c/environments/" + envId + "/credentials",
+		"/subscriptions/2d681144861c/environments/"+envId+"/credentials",
 		CkboxCreateAccessKeyReqBody{Name: name},
 		nil,
 	)
@@ -62,7 +61,7 @@ func (c *APIClient) CreateCkboxAccessKey(ctx context.Context, name, envId string
 	}
 
 	accessKey, err := c.ReadCkboxAccessKey(ctx, name, envId)
-	
+
 	if err != nil {
 		tflog.Error(ctx, "CallInto failed", map[string]any{"error": err.Error()})
 		return nil, err
@@ -80,7 +79,7 @@ func (c *APIClient) DeleteCkboxAccessKey(ctx context.Context, name, envId, token
 	_, err := c.CallInto(
 		ctx,
 		"DELETE",
-		"/subscriptions/2d681144861c/environments/" + envId + "/credentials/" + token,
+		"/subscriptions/2d681144861c/environments/"+envId+"/credentials/"+token,
 		nil,
 		nil,
 	)

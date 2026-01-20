@@ -3,14 +3,13 @@ package provider
 import (
 	"context"
 	"fmt"
-	"strings"
-	"terraform-provider-saasutils/internal/ckboxapi"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"strings"
+	"terraform-provider-saasutils/internal/ckboxapi"
 )
 
 var (
@@ -27,9 +26,9 @@ type resourceCkboxAccessKey struct {
 }
 
 type CkboxAccesKeyModel struct {
-	ID   	types.String `tfsdk:"id"`
-	Name 	types.String `tfsdk:"name"`
-	EnvId	types.String `tfsdk:"env_id"`
+	ID    types.String `tfsdk:"id"`
+	Name  types.String `tfsdk:"name"`
+	EnvId types.String `tfsdk:"env_id"`
 }
 
 func (r *resourceCkboxAccessKey) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -80,8 +79,8 @@ func (r *resourceCkboxAccessKey) Create(ctx context.Context, req resource.Create
 	}
 
 	accessKey, err := r.client.CreateCkboxAccessKey(
-		ctx, 
-		plan.Name.ValueString(), 
+		ctx,
+		plan.Name.ValueString(),
 		plan.EnvId.ValueString(),
 	)
 
@@ -91,14 +90,13 @@ func (r *resourceCkboxAccessKey) Create(ctx context.Context, req resource.Create
 	}
 
 	state := CkboxAccesKeyModel{
-		ID:     types.StringValue(accessKey.Value),
-		Name:   types.StringValue(accessKey.Name),
-		EnvId:	types.StringValue(plan.EnvId.ValueString()),
+		ID:    types.StringValue(accessKey.Value),
+		Name:  types.StringValue(accessKey.Name),
+		EnvId: types.StringValue(plan.EnvId.ValueString()),
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
-
 
 func (r *resourceCkboxAccessKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state CkboxAccesKeyModel
@@ -130,7 +128,6 @@ func (r *resourceCkboxAccessKey) Read(ctx context.Context, req resource.ReadRequ
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-
 func (r *resourceCkboxAccessKey) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 
 }
@@ -152,7 +149,7 @@ func (r *resourceCkboxAccessKey) Delete(ctx context.Context, req resource.Delete
 	)
 
 	if err != nil {
-		resp.Diagnostics.AddError("Unable to delete Ckbox Access Key for env : " + state.EnvId.ValueString(), err.Error())
+		resp.Diagnostics.AddError("Unable to delete Ckbox Access Key for env : "+state.EnvId.ValueString(), err.Error())
 		return
 	}
 

@@ -2,8 +2,9 @@ package ckboxapi
 
 import (
 	"context"
-	"fmt"
 	"encoding/json"
+	"fmt"
+
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
@@ -40,19 +41,19 @@ func (c *APIClient) CreateCkboxEnv(ctx context.Context, name string, region stri
 	defer c.UnsetHeader("organizationid")
 
 	_, err := c.CallInto(
-		ctx, 
-		"POST", 
-		"/subscriptions/2d681144861c/environments", 
-		CkboxEnvCreateReqBody{Name: name, Region: region}, 
+		ctx,
+		"POST",
+		"/subscriptions/2d681144861c/environments",
+		CkboxEnvCreateReqBody{Name: name, Region: region},
 		nil,
 	)
 
-	if (err != nil) {
+	if err != nil {
 		return nil, err
 	}
 
 	env, err := c.ReadCkboxEnv(ctx, name)
-	
+
 	if err != nil {
 		return nil, err
 	}
@@ -66,12 +67,12 @@ func (c *APIClient) DeleteCkboxEnv(ctx context.Context, id string) error {
 	c.SetHeader("organizationid", "b9ee06c380fb")
 	defer c.UnsetHeader("organizationid")
 	_, err := c.CallInto(
-		ctx, 
-		"DELETE", 
-		"/subscriptions/2d681144861c/environments/" + id, 
-		nil, 
+		ctx,
+		"DELETE",
+		"/subscriptions/2d681144861c/environments/"+id,
+		nil,
 		nil,
 	)
-	
+
 	return err
 }

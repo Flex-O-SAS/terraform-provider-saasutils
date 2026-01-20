@@ -1,0 +1,22 @@
+terraform {
+  required_providers {
+    saasutils = {
+      source = "local/saasutils/saasutils"
+      version = "0.1.0"
+    }
+  }
+}
+
+provider "saasutils" {
+  email    = "example@example.com"
+  password = "password"
+}
+
+resource "saasutils_ckbox_env" "example" {
+  name = "example"
+}
+
+resource "saasutils_ckbox_access_key" "example" {
+    env_id = saasutils_ckbox_env.example.id
+    name = "example"
+}
