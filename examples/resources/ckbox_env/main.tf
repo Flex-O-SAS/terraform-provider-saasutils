@@ -1,8 +1,10 @@
+# Copyright (c) HashiCorp, Inc.
+
 terraform {
+  required_version = ">= 1.8.0"
   required_providers {
     saasutils = {
-      source = "local/saasutils/saasutils"
-      version = "0.1.0"
+      source = "registry.terraform.io/flex-o-sas/saasutils"
     }
   }
 }
@@ -15,11 +17,3 @@ provider "saasutils" {
 resource "saasutils_ckbox_env" "example" {
   name = "example"
 }
-
-# data "saasutils_ckbox_env" "example" {
-#   name = "test"
-# }
-
-# output "env" {
-#   value = saasutils_ckbox_env.example.id
-# }
