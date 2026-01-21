@@ -4,7 +4,7 @@ terraform {
   required_version = ">= 1.8.0"
   required_providers {
     saasutils = {
-      source = "local/saasutils/saasutils"
+      source = "registry.terraform.io/flex-o-sas/saasutils"
     }
   }
 }

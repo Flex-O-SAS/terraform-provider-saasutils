@@ -10,8 +10,11 @@ terraform {
 }
 
 provider "saasutils" {
-  email    = "example@example.com"
-  password = "password"
+  email           = "example@example.com"
+  password        = "password"
+  organization_id = "example"
+  subscription_id = "example"
+  base_url        = "https://example.com/"
 }
 
 resource "saasutils_ckbox_env" "example" {
