@@ -18,4 +18,6 @@ description: |-
 
 - `base_url` (String)
 - `email` (String)
+- `organization_id` (String)
 - `password` (String)
+- `subscription_id` (String)
