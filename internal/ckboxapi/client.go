@@ -41,11 +41,11 @@ func (c *APIClient) SetHeader(key, value string) {
 }
 
 func (c *APIClient) UnsetHeader(key string) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
 	if c == nil || c.defaultHeaders == nil {
 		return
 	}
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	delete(c.defaultHeaders, key)
 }
 
