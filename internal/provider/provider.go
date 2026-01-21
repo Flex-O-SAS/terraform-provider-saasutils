@@ -91,7 +91,6 @@ func (p *stringFunctionsProvider) Configure(ctx context.Context, req provider.Co
 		}
 	}
 
-	// To provide the client in all the resources/datasources that needs it
 	resp.ResourceData = p.client
 	resp.DataSourceData = p.client
 }
