@@ -57,7 +57,6 @@ func (c *APIClient) GetHeader(key string) (string, bool) {
 	return v, ok
 }
 
-// Do envoie une requête HTTP et retourne le body brut + status code.
 func (c *APIClient) Do(
 	ctx context.Context,
 	method, path string,
