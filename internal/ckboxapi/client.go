@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -17,6 +18,7 @@ type APIClient struct {
 	baseURL        string
 	http           *http.Client
 	defaultHeaders map[string]string
+	mutex		   sync.Mutex
 }
 
 func NewCkboxClient(baseURL string, timeout time.Duration) *APIClient {
@@ -33,10 +35,14 @@ func NewCkboxClient(baseURL string, timeout time.Duration) *APIClient {
 }
 
 func (c *APIClient) SetHeader(key, value string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	c.defaultHeaders[key] = value
 }
 
 func (c *APIClient) UnsetHeader(key string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	if c == nil || c.defaultHeaders == nil {
 		return
 	}
