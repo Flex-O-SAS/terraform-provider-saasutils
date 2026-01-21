@@ -24,14 +24,14 @@ func TestAccCkboxEnv_basic_mock(t *testing.T) {
 			_, _ = w.Write([]byte(`{"accessToken":"mock-token"}`))
 			return
 
-		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscriptions/2d681144861c/environments":
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscriptions/test/environments":
 			// Create env
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(200)
 			_, _ = w.Write([]byte(`{"ok":true}`))
 			return
 
-		case r.Method == http.MethodGet && r.URL.Path == "/v1/subscriptions/2d681144861c/environments":
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/subscriptions/test/environments":
 			// Read/list envs => doit contenir "acc-test-env"
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(200)
@@ -42,7 +42,7 @@ func TestAccCkboxEnv_basic_mock(t *testing.T) {
 				]
 			}`))
 			return
-		case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/v1/subscriptions/2d681144861c/environments/"):
+		case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/v1/subscriptions/test/environments/"):
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(200)
 			_, _ = w.Write([]byte(`{"ok":true}`))
@@ -60,7 +60,9 @@ func TestAccCkboxEnv_basic_mock(t *testing.T) {
 provider "saasutils" {
   email    = "fake"
   password = "fake"
-  base_url = "%s/v1"
+  base_url = "%s/"
+  organization_id = "test"
+  subscription_id = "test"
 }
 
 resource "saasutils_ckbox_env" "example" {
