@@ -13,11 +13,8 @@ import (
 func (c *APIClient) ReadCkboxEnv(ctx context.Context, name string) (*CkboxEnv, error) {
 	tflog.Debug(ctx, "ReadCkboxEnv called", map[string]any{"name": name})
 
-	c.SetHeader("organizationid", "b9ee06c380fb")
 	var respBody CkboxEnvRespBody
-
-	_, err := c.CallInto(ctx, "GET", "/subscriptions/2d681144861c/environments", nil, &respBody)
-	c.UnsetHeader("organizationid")
+	_, err := c.CallInto(ctx, "GET", "/subscriptions/"+c.GetSubscriptionId()+"/environments", nil, &respBody)
 	if err != nil {
 		tflog.Error(ctx, "CallInto failed", map[string]any{"error": err.Error()})
 		return nil, err
@@ -39,13 +36,10 @@ func (c *APIClient) ReadCkboxEnv(ctx context.Context, name string) (*CkboxEnv, e
 func (c *APIClient) CreateCkboxEnv(ctx context.Context, name string, region string) (*CkboxEnv, error) {
 	tflog.Debug(ctx, "CreateCkboxEnv called", map[string]any{"name": name})
 
-	c.SetHeader("organizationid", "b9ee06c380fb")
-	defer c.UnsetHeader("organizationid")
-
 	_, err := c.CallInto(
 		ctx,
 		"POST",
-		"/subscriptions/2d681144861c/environments",
+		"/subscriptions/"+c.GetSubscriptionId()+"/environments",
 		CkboxEnvCreateReqBody{Name: name, Region: region},
 		nil,
 	)
@@ -64,14 +58,12 @@ func (c *APIClient) CreateCkboxEnv(ctx context.Context, name string, region stri
 }
 
 func (c *APIClient) DeleteCkboxEnv(ctx context.Context, id string) error {
-	tflog.Debug(ctx, "DeleteCkboxEnv called", map[string]any{"id": id, "url": "/subscriptions/2d681144861c/environments/" + id})
+	tflog.Debug(ctx, "DeleteCkboxEnv called", map[string]any{"id": id, "url": "/subscriptions/" + c.GetSubscriptionId() + "/environments/" + id})
 
-	c.SetHeader("organizationid", "b9ee06c380fb")
-	defer c.UnsetHeader("organizationid")
 	_, err := c.CallInto(
 		ctx,
 		"DELETE",
-		"/subscriptions/2d681144861c/environments/"+id,
+		"/subscriptions/"+c.GetSubscriptionId()+"/environments/"+id,
 		nil,
 		nil,
 	)

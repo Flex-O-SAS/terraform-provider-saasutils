@@ -15,15 +15,19 @@ import (
 )
 
 type APIClient struct {
-	baseURL        string
-	http           *http.Client
-	defaultHeaders map[string]string
-	mutex          sync.Mutex
+	baseURL         string
+	http            *http.Client
+	defaultHeaders  map[string]string
+	mutex           sync.Mutex
+	subscription_id string
+	organization_id string
 }
 
-func NewCkboxClient(baseURL string, timeout time.Duration) *APIClient {
+func NewCkboxClient(baseURL, organization_id, subscription_id string, timeout time.Duration) *APIClient {
 	return &APIClient{
-		baseURL: baseURL,
+		baseURL:         baseURL,
+		subscription_id: subscription_id,
+		organization_id: organization_id,
 		http: &http.Client{
 			Timeout: timeout,
 		},
@@ -40,13 +44,14 @@ func (c *APIClient) SetHeader(key, value string) {
 	c.defaultHeaders[key] = value
 }
 
-func (c *APIClient) UnsetHeader(key string) {
-	if c == nil || c.defaultHeaders == nil {
-		return
-	}
+func (c *APIClient) SetOrganizationId() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	delete(c.defaultHeaders, key)
+	c.defaultHeaders["organizationid"] = c.organization_id
+}
+
+func (c *APIClient) GetSubscriptionId() string {
+	return c.subscription_id
 }
 
 func (c *APIClient) GetHeader(key string) (string, bool) {
