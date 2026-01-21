@@ -18,11 +18,8 @@ type AuthenticateReqBody struct {
 }
 
 func (c *APIClient) Authenticate(ctx context.Context, email string, password string) (string, error) {
-	c.SetHeader("Origin", "https://portal.ckeditor.com")
-	c.SetHeader("Referer", "https://portal.ckeditor.com/")
-	c.SetHeader("Accept", "*/*")
-
 	var resp AuthenticateRespBody
+
 	_, err := c.CallInto(
 		ctx,
 		http.MethodPost,
@@ -43,11 +40,4 @@ func (c *APIClient) Authenticate(ctx context.Context, email string, password str
 
 	c.SetHeader("Authorization", resp.AccessToken)
 	return resp.AccessToken, nil
-}
-
-func (c *APIClient) EnsureHeader() {
-	_, isHere := c.GetHeader("organizationid")
-	if !isHere {
-		c.SetHeader("organizationid", "b9ee06c380fb")
-	}
 }

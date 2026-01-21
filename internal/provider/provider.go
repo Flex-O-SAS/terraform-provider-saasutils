@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"strings"
 	"terraform-provider-saasutils/internal/ckboxapi"
 	"time"
 )
@@ -31,9 +32,11 @@ type stringFunctionsProvider struct {
 }
 
 type providerConfigModel struct {
-	BaseURL  types.String `tfsdk:"base_url"`
-	Email    types.String `tfsdk:"email"`
-	Password types.String `tfsdk:"password"`
+	BaseURL         types.String `tfsdk:"base_url"`
+	Email           types.String `tfsdk:"email"`
+	Password        types.String `tfsdk:"password"`
+	Organization_id types.String `tfsdk:"organization_id"`
+	Subscription_id types.String `tfsdk:"subscription_id"`
 }
 
 func (p *stringFunctionsProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -45,6 +48,12 @@ func (p *stringFunctionsProvider) Metadata(ctx context.Context, req provider.Met
 func (p *stringFunctionsProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"subscription_id": schema.StringAttribute{
+				Optional: true,
+			},
+			"organization_id": schema.StringAttribute{
+				Optional: true,
+			},
 			"base_url": schema.StringAttribute{
 				Optional: true,
 			},
@@ -58,23 +67,48 @@ func (p *stringFunctionsProvider) Schema(_ context.Context, _ provider.SchemaReq
 	}
 }
 
+func isSet(v types.String) bool {
+	return !v.IsNull() &&
+		!v.IsUnknown() &&
+		strings.TrimSpace(v.ValueString()) != ""
+}
+
 func (p *stringFunctionsProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
 	var config providerConfigModel
 
 	diags := req.Config.Get(ctx, &config)
 
-	baseURL := "https://portal-api.ckeditor.com/v1"
-	if !config.BaseURL.IsNull() && config.BaseURL.ValueString() != "" {
-		baseURL = config.BaseURL.ValueString()
-	}
-	p.client = ckboxapi.NewCkboxClient(baseURL, 60*time.Second)
+	anySet :=
+		isSet(config.BaseURL) ||
+			isSet(config.Organization_id) ||
+			isSet(config.Subscription_id) ||
+			isSet(config.Email) ||
+			isSet(config.Password)
 
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
+	allSet :=
+		isSet(config.BaseURL) &&
+			isSet(config.Organization_id) &&
+			isSet(config.Subscription_id) &&
+			isSet(config.Email) &&
+			isSet(config.Password)
 
-	if !config.Email.IsNull() && !config.Password.IsNull() {
+	if allSet {
+		p.client = ckboxapi.NewCkboxClient(
+			config.BaseURL.ValueString()+"v1",
+			config.Organization_id.ValueString(),
+			config.Subscription_id.ValueString(),
+			60*time.Second,
+		)
+
+		p.client.SetHeader("Origin", config.BaseURL.ValueString())
+		p.client.SetHeader("Referer", config.BaseURL.ValueString()+"/")
+		p.client.SetHeader("Accept", "*/*")
+		p.client.SetHeader("organizationid", config.Organization_id.ValueString())
+
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
 		tflog.Debug(ctx, "Authenticating CKBox client")
 
 		_, err := p.client.Authenticate(
@@ -89,10 +123,15 @@ func (p *stringFunctionsProvider) Configure(ctx context.Context, req provider.Co
 			)
 			return
 		}
-	}
 
-	resp.ResourceData = p.client
-	resp.DataSourceData = p.client
+		resp.ResourceData = p.client
+		resp.DataSourceData = p.client
+	} else if anySet && !allSet {
+		resp.Diagnostics.AddError(
+			"Invalid Configuration, all fields must be set if you intend to use it as the ckbox provider",
+			"Invalid Configuration",
+		)
+	}
 }
 
 func (*stringFunctionsProvider) DataSources(_ context.Context) []func() datasource.DataSource {
