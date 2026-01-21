@@ -18,7 +18,7 @@ type APIClient struct {
 	baseURL        string
 	http           *http.Client
 	defaultHeaders map[string]string
-	mutex		   sync.Mutex
+	mutex          sync.Mutex
 }
 
 func NewCkboxClient(baseURL string, timeout time.Duration) *APIClient {
