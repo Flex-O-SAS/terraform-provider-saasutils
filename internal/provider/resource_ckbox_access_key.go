@@ -117,7 +117,7 @@ func (r *resourceCkboxAccessKey) Read(ctx context.Context, req resource.ReadRequ
 		state.Name.ValueString(),
 		state.EnvId.ValueString(),
 	)
-	tflog.Debug(ctx, "After ReadCkboxAccessKey", map[string]any{"accessKey": accessKey})
+
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") || accessKey == nil {
 			resp.State.RemoveResource(ctx)
