@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"strings"
 	"terraform-provider-saasutils/internal/ckboxapi"
 )
@@ -45,6 +46,9 @@ func (r *resourceCkboxAccessKey) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"env_id": schema.StringAttribute{
 				Required: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"name": schema.StringAttribute{
 				Required: true,
@@ -113,8 +117,9 @@ func (r *resourceCkboxAccessKey) Read(ctx context.Context, req resource.ReadRequ
 		state.Name.ValueString(),
 		state.EnvId.ValueString(),
 	)
+	tflog.Debug(ctx, "After ReadCkboxAccessKey", map[string]any{"accessKey": accessKey})
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if strings.Contains(err.Error(), "not found") || accessKey == nil {
 			resp.State.RemoveResource(ctx)
 			return
 		}
