@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -16,8 +17,9 @@ import (
 )
 
 var (
-	_ resource.Resource              = &resourceCkboxEnv{}
-	_ resource.ResourceWithConfigure = &resourceCkboxEnv{}
+	_ resource.Resource                = &resourceCkboxEnv{}
+	_ resource.ResourceWithConfigure   = &resourceCkboxEnv{}
+	_ resource.ResourceWithImportState = &resourceCkboxEnv{}
 )
 
 func NewCkboxEnvResource() resource.Resource {
@@ -51,6 +53,12 @@ func (r *resourceCkboxEnv) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 		},
 	}
+}
+
+func (r *resourceCkboxEnv) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	resp.Diagnostics.Append(
+		resp.State.SetAttribute(ctx, path.Root("name"), req.ID)...,
+	)
 }
 
 func (r *resourceCkboxEnv) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
