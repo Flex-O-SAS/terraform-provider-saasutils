@@ -14,7 +14,7 @@ func (c *APIClient) ReadCkboxAccessKey(ctx context.Context, name, envId string) 
 
 	var respBody CkboxReadAccesKeyRespBody
 
-	_, err := c.CallInto(
+	code, err := c.CallInto(
 		ctx,
 		"GET",
 		"/subscriptions/"+c.GetSubscriptionId()+"/environments/"+envId+"/credentials",
@@ -22,7 +22,12 @@ func (c *APIClient) ReadCkboxAccessKey(ctx context.Context, name, envId string) 
 		&respBody,
 	)
 
+	tflog.Debug(ctx, "ReadCkboxAccessKey called", map[string]any{"code": code})
+
 	if err != nil {
+		if code == 403 {
+			return nil, err
+		}
 		tflog.Error(ctx, "CallInto failed", map[string]any{"error": err.Error()})
 		return nil, err
 	}
