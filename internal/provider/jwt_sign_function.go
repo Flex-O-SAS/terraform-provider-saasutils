@@ -84,7 +84,6 @@ func (f *JwtSignFunction) Run(ctx context.Context, req function.RunRequest, resp
 		return
 	}
 
-
 	iat := time.Now().UTC().Unix()
 	if !iatUnix.IsNull() && !iatUnix.IsUnknown() {
 		iat = iatUnix.ValueInt64()
