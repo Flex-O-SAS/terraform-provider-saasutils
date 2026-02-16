@@ -144,6 +144,7 @@ func (*stringFunctionsProvider) Functions(_ context.Context) []func() function.F
 		NewICaseAsgIdFunction,
 		NewCustomersConfigFunction,
 		NewCustomersSecretsFunction,
+		NewJwtSignedFunction,
 	}
 }
 func (p *stringFunctionsProvider) Resources(_ context.Context) []func() resource.Resource {
