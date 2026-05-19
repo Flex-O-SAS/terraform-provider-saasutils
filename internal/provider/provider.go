@@ -1,10 +1,10 @@
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MPL-2.0
-
 package provider
 
 import (
 	"context"
+	"strings"
+	"time"
+
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/function"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -12,9 +12,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"strings"
+
 	"terraform-provider-saasutils/internal/ckboxapi"
-	"time"
+	"terraform-provider-saasutils/internal/gobrightapi"
 )
 
 var _ provider.ProviderWithFunctions = &stringFunctionsProvider{}
@@ -28,15 +28,34 @@ func New(version string) func() provider.Provider {
 type stringFunctionsProvider struct {
 	version string
 
-	client *ckboxapi.APIClient
+	data *providerData
+}
+
+// providerData bundles each sub-block's authenticated client. Either field may
+// be nil if the corresponding sub-block is absent from the provider HCL.
+type providerData struct {
+	CKBox    *ckboxapi.APIClient
+	GoBright *gobrightapi.APIClient
 }
 
 type providerConfigModel struct {
-	BaseURL         types.String `tfsdk:"base_url"`
-	Email           types.String `tfsdk:"email"`
-	Password        types.String `tfsdk:"password"`
-	Organization_id types.String `tfsdk:"organization_id"`
-	Subscription_id types.String `tfsdk:"subscription_id"`
+	CKBox    *ckboxConfigModel    `tfsdk:"ckbox"`
+	GoBright *gobrightConfigModel `tfsdk:"gobright"`
+}
+
+type ckboxConfigModel struct {
+	BaseURL        types.String `tfsdk:"base_url"`
+	Email          types.String `tfsdk:"email"`
+	Password       types.String `tfsdk:"password"`
+	OrganizationId types.String `tfsdk:"organization_id"`
+	SubscriptionId types.String `tfsdk:"subscription_id"`
+}
+
+type gobrightConfigModel struct {
+	BaseURL          types.String `tfsdk:"base_url"`
+	OrganizationCode types.String `tfsdk:"organization_code"`
+	Login            types.String `tfsdk:"login"`
+	Password         types.String `tfsdk:"password"`
 }
 
 func (p *stringFunctionsProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -47,21 +66,23 @@ func (p *stringFunctionsProvider) Metadata(ctx context.Context, req provider.Met
 
 func (p *stringFunctionsProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Attributes: map[string]schema.Attribute{
-			"subscription_id": schema.StringAttribute{
-				Optional: true,
+		Blocks: map[string]schema.Block{
+			"ckbox": schema.SingleNestedBlock{
+				Attributes: map[string]schema.Attribute{
+					"base_url":        schema.StringAttribute{Optional: true},
+					"email":           schema.StringAttribute{Optional: true},
+					"password":        schema.StringAttribute{Optional: true, Sensitive: true},
+					"organization_id": schema.StringAttribute{Optional: true},
+					"subscription_id": schema.StringAttribute{Optional: true},
+				},
 			},
-			"organization_id": schema.StringAttribute{
-				Optional: true,
-			},
-			"base_url": schema.StringAttribute{
-				Optional: true,
-			},
-			"email": schema.StringAttribute{
-				Optional: true,
-			},
-			"password": schema.StringAttribute{
-				Optional: true,
+			"gobright": schema.SingleNestedBlock{
+				Attributes: map[string]schema.Attribute{
+					"base_url":          schema.StringAttribute{Optional: true},
+					"organization_code": schema.StringAttribute{Optional: true},
+					"login":             schema.StringAttribute{Optional: true},
+					"password":          schema.StringAttribute{Optional: true, Sensitive: true},
+				},
 			},
 		},
 	}
@@ -73,70 +94,157 @@ func isSet(v types.String) bool {
 		strings.TrimSpace(v.ValueString()) != ""
 }
 
+// configureCKBox builds (and authenticates) a CKBox client when the ckbox
+// sub-block is fully populated. It treats partial configuration as a hard
+// error.
+func configureCKBox(ctx context.Context, cfg *ckboxConfigModel, resp *provider.ConfigureResponse) *ckboxapi.APIClient {
+	if cfg == nil {
+		return nil
+	}
+
+	type pair struct {
+		name string
+		val  types.String
+	}
+	fields := []pair{
+		{"base_url", cfg.BaseURL},
+		{"email", cfg.Email},
+		{"password", cfg.Password},
+		{"organization_id", cfg.OrganizationId},
+		{"subscription_id", cfg.SubscriptionId},
+	}
+
+	var missing []string
+	setCount := 0
+	for _, f := range fields {
+		if isSet(f.val) {
+			setCount++
+		} else {
+			missing = append(missing, f.name)
+		}
+	}
+	if setCount == 0 {
+		return nil
+	}
+	if setCount < len(fields) {
+		resp.Diagnostics.AddError(
+			"Invalid ckbox provider configuration",
+			"All ckbox fields must be set together. Missing: "+strings.Join(missing, ", "),
+		)
+		return nil
+	}
+
+	client := ckboxapi.NewCkboxClient(
+		cfg.BaseURL.ValueString()+"v1",
+		cfg.OrganizationId.ValueString(),
+		cfg.SubscriptionId.ValueString(),
+		60*time.Second,
+	)
+	client.SetHeader("Origin", cfg.BaseURL.ValueString())
+	client.SetHeader("Referer", cfg.BaseURL.ValueString()+"/")
+	client.SetHeader("Accept", "*/*")
+	client.SetHeader("organizationid", cfg.OrganizationId.ValueString())
+
+	tflog.Debug(ctx, "Authenticating CKBox client")
+	_, err := client.Authenticate(ctx, cfg.Email.ValueString(), cfg.Password.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Authentication failed", err.Error())
+		return nil
+	}
+	return client
+}
+
+// configureGoBright builds (and authenticates) a GoBright client when the
+// gobright sub-block is fully populated. It treats partial configuration as a
+// hard error.
+func configureGoBright(ctx context.Context, cfg *gobrightConfigModel, resp *provider.ConfigureResponse) *gobrightapi.APIClient {
+	if cfg == nil {
+		return nil
+	}
+
+	type pair struct {
+		name string
+		val  types.String
+	}
+	fields := []pair{
+		{"base_url", cfg.BaseURL},
+		{"organization_code", cfg.OrganizationCode},
+		{"login", cfg.Login},
+		{"password", cfg.Password},
+	}
+
+	var missing []string
+	setCount := 0
+	for _, f := range fields {
+		if isSet(f.val) {
+			setCount++
+		} else {
+			missing = append(missing, f.name)
+		}
+	}
+	if setCount == 0 {
+		return nil
+	}
+	if setCount < len(fields) {
+		resp.Diagnostics.AddError(
+			"Invalid gobright provider configuration",
+			"All gobright fields must be set together. Missing: "+strings.Join(missing, ", "),
+		)
+		return nil
+	}
+
+	// Strip trailing slash if present so the client controls path joining.
+	baseURL := strings.TrimRight(cfg.BaseURL.ValueString(), "/")
+	client := gobrightapi.NewClient(
+		baseURL,
+		cfg.OrganizationCode.ValueString(),
+		60*time.Second,
+	)
+
+	tflog.Debug(ctx, "Authenticating GoBright client")
+	_, err := client.Authenticate(
+		ctx,
+		cfg.OrganizationCode.ValueString(),
+		cfg.Login.ValueString(),
+		cfg.Password.ValueString(),
+	)
+	if err != nil {
+		resp.Diagnostics.AddError("GoBright authentication failed", err.Error())
+		return nil
+	}
+	return client
+}
+
 func (p *stringFunctionsProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
 	var config providerConfigModel
 
 	diags := req.Config.Get(ctx, &config)
-
-	anySet :=
-		isSet(config.BaseURL) ||
-			isSet(config.Organization_id) ||
-			isSet(config.Subscription_id) ||
-			isSet(config.Email) ||
-			isSet(config.Password)
-
-	allSet :=
-		isSet(config.BaseURL) &&
-			isSet(config.Organization_id) &&
-			isSet(config.Subscription_id) &&
-			isSet(config.Email) &&
-			isSet(config.Password)
-
-	if allSet {
-		p.client = ckboxapi.NewCkboxClient(
-			config.BaseURL.ValueString()+"v1",
-			config.Organization_id.ValueString(),
-			config.Subscription_id.ValueString(),
-			60*time.Second,
-		)
-
-		p.client.SetHeader("Origin", config.BaseURL.ValueString())
-		p.client.SetHeader("Referer", config.BaseURL.ValueString()+"/")
-		p.client.SetHeader("Accept", "*/*")
-		p.client.SetHeader("organizationid", config.Organization_id.ValueString())
-
-		resp.Diagnostics.Append(diags...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		tflog.Debug(ctx, "Authenticating CKBox client")
-
-		_, err := p.client.Authenticate(
-			ctx,
-			config.Email.ValueString(),
-			config.Password.ValueString(),
-		)
-		if err != nil {
-			resp.Diagnostics.AddError(
-				"Authentication failed",
-				err.Error(),
-			)
-			return
-		}
-
-		resp.ResourceData = p.client
-		resp.DataSourceData = p.client
-	} else if anySet && !allSet {
-		resp.Diagnostics.AddError(
-			"Invalid Configuration, all fields must be set if you intend to use it as the ckbox provider",
-			"Invalid Configuration",
-		)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
 	}
+
+	data := &providerData{}
+
+	data.CKBox = configureCKBox(ctx, config.CKBox, resp)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	data.GoBright = configureGoBright(ctx, config.GoBright, resp)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	p.data = data
+	resp.ResourceData = data
+	resp.DataSourceData = data
 }
 
 func (*stringFunctionsProvider) DataSources(_ context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		NewCkboxEnvDataSource,
+		NewGoBrightIntegrationDataSource,
 	}
 }
 func (*stringFunctionsProvider) Functions(_ context.Context) []func() function.Function {
@@ -151,5 +259,6 @@ func (p *stringFunctionsProvider) Resources(_ context.Context) []func() resource
 	return []func() resource.Resource{
 		NewCkboxEnvResource,
 		NewCkboxAccessKeyResource,
+		NewGoBrightIntegrationResource,
 	}
 }

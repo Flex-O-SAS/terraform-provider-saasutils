@@ -1,5 +1,3 @@
-// Copyright (c) HashiCorp, Inc.
-
 package provider
 
 import (
@@ -46,16 +44,24 @@ func (d *dataCkboxAccessKey) Configure(_ context.Context, req datasource.Configu
 		return
 	}
 
-	client, ok := req.ProviderData.(*ckboxapi.APIClient)
+	data, ok := req.ProviderData.(*providerData)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Provider Data Type",
-			fmt.Sprintf("Expected *ckboxapi.APIClient, got: %T", req.ProviderData),
+			fmt.Sprintf("Expected *providerData, got: %T", req.ProviderData),
 		)
 		return
 	}
 
-	d.client = client
+	if data.CKBox == nil {
+		resp.Diagnostics.AddError(
+			"ckbox provider block not configured",
+			"The saasutils_ckbox_access_key data source requires the provider's ckbox { ... } block to be set with all fields.",
+		)
+		return
+	}
+
+	d.client = data.CKBox
 }
 
 func (d *dataCkboxAccessKey) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {

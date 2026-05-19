@@ -1,5 +1,3 @@
-// Copyright (c) HashiCorp, Inc.
-
 package provider
 
 import (
@@ -81,11 +79,13 @@ func TestAccCkboxAccessKey_basic_mock(t *testing.T) {
 
 	cfg := fmt.Sprintf(`
 provider "saasutils" {
-  email    = "fake"
-  password = "fake"
-  base_url = "%s/"
-  organization_id = "test"
-  subscription_id = "test"
+  ckbox {
+    email           = "fake"
+    password        = "fake"
+    base_url        = "%s/"
+    organization_id = "test"
+    subscription_id = "test"
+  }
 }
 
 resource "saasutils_ckbox_env" "example" {
