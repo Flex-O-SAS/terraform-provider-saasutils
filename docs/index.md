@@ -16,8 +16,27 @@ description: |-
 
 ### Optional
 
+- `ckbox` (Block, Optional) (see [below for nested schema](#nestedblock--ckbox))
+- `gobright` (Block, Optional) (see [below for nested schema](#nestedblock--gobright))
+
+<a id="nestedblock--ckbox"></a>
+### Nested Schema for `ckbox`
+
+Optional:
+
 - `base_url` (String)
 - `email` (String)
 - `organization_id` (String)
-- `password` (String)
+- `password` (String, Sensitive)
 - `subscription_id` (String)
+
+
+<a id="nestedblock--gobright"></a>
+### Nested Schema for `gobright`
+
+Optional:
+
+- `base_url` (String)
+- `login` (String)
+- `organization_code` (String)
+- `password` (String, Sensitive)
