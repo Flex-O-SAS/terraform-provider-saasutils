@@ -7,10 +7,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"time"
 
+	"github.com/zitadel/zitadel-go/v3/pkg/client"
 	systemclient "github.com/zitadel/zitadel-go/v3/pkg/client/system"
 	instancepb "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/instance"
+	objectpb "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/object/v2"
+	orgpb "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/org/v2"
 	systempb "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/system"
+	"github.com/zitadel/zitadel-go/v3/pkg/zitadel"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -18,6 +24,14 @@ import (
 // Client is a thin wrapper around the Zitadel system gRPC client.
 type Client struct {
 	sys *systemclient.Client
+
+	// insecure and apiPort describe how to reach instance-scoped APIs (e.g. the
+	// org service of a freshly created instance) over the same transport as the
+	// configured SystemAPI. apiPort is the port parsed from Config.API and is
+	// reused for instance connections, which matters only on the insecure
+	// local-dev path where all instances share one host:port.
+	insecure bool
+	apiPort  string
 }
 
 // Config carries the inputs needed to authenticate against the Zitadel SystemAPI.
@@ -57,7 +71,15 @@ func NewClient(ctx context.Context, cfg Config) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("zitadel: connect: %w", err)
 	}
-	return &Client{sys: sys}, nil
+
+	// Best-effort extract the port from the configured gRPC endpoint so that
+	// instance-scoped connections can reuse it. Defaults to 443 (TLS).
+	apiPort := "443"
+	if _, port, splitErr := net.SplitHostPort(cfg.API); splitErr == nil && port != "" {
+		apiPort = port
+	}
+
+	return &Client{sys: sys, insecure: cfg.Insecure, apiPort: apiPort}, nil
 }
 
 // Close releases the underlying gRPC connection.
@@ -108,4 +130,95 @@ func (c *Client) RemoveInstance(ctx context.Context, instanceID string) error {
 		return err
 	}
 	return nil
+}
+
+// WaitForInstanceRunning polls GetInstance until the instance reports
+// State_STATE_RUNNING or the timeout elapses, returning the running
+// InstanceDetail. On timeout it returns an error naming the last observed
+// state. A not-yet-visible instance (NotFound right after creation) is treated
+// as "still starting" and keeps the poll alive.
+func (c *Client) WaitForInstanceRunning(ctx context.Context, instanceID string, timeout time.Duration) (*instancepb.InstanceDetail, error) {
+	pollCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	last := instancepb.State_STATE_UNSPECIFIED
+	for {
+		detail, err := c.GetInstance(pollCtx, instanceID)
+		switch {
+		case err != nil && pollCtx.Err() == nil:
+			// A genuine API error (not the poll timeout) is fatal.
+			return nil, err
+		case err == nil && detail != nil:
+			if last = detail.GetState(); last == instancepb.State_STATE_RUNNING {
+				return detail, nil
+			}
+		}
+
+		select {
+		case <-pollCtx.Done():
+			return nil, fmt.Errorf("timed out after %s waiting for instance %q to reach STATE_RUNNING (last observed state: %s)", timeout, instanceID, last)
+		case <-ticker.C:
+		}
+	}
+}
+
+// OrgLookup carries the inputs needed to find an organization on a freshly
+// created instance. Domain is the instance host to dial; OrgName is the
+// organization to match by exact name. Credentials are either a machine user's
+// PAT, or a human owner's Username/Password.
+type OrgLookup struct {
+	Domain   string
+	OrgName  string
+	PAT      string
+	Username string
+	Password string
+}
+
+// FindOrganizationID connects to the instance at l.Domain with the supplied
+// credentials and returns the id of the organization named l.OrgName.
+func (c *Client) FindOrganizationID(ctx context.Context, l OrgLookup) (string, error) {
+	var auth client.Option
+	switch {
+	case l.PAT != "":
+		auth = client.WithAuth(client.PAT(l.PAT))
+	case l.Username != "" && l.Password != "":
+		auth = client.WithAuth(client.PasswordAuthentication(l.Username, l.Password, client.ScopeZitadelAPI()))
+	default:
+		return "", errors.New("no credentials available to query organizations (need a PAT or human owner credentials)")
+	}
+
+	zOpts := []zitadel.Option{}
+	if c.insecure {
+		zOpts = append(zOpts, zitadel.WithInsecure(c.apiPort))
+	}
+
+	api, err := client.New(ctx, zitadel.New(l.Domain, zOpts...), auth)
+	if err != nil {
+		return "", fmt.Errorf("connect to instance %q: %w", l.Domain, err)
+	}
+	defer api.Close()
+
+	resp, err := api.OrganizationServiceV2().ListOrganizations(ctx, &orgpb.ListOrganizationsRequest{
+		Queries: []*orgpb.SearchQuery{{
+			Query: &orgpb.SearchQuery_NameQuery{
+				NameQuery: &orgpb.OrganizationNameQuery{
+					Name:   l.OrgName,
+					Method: objectpb.TextQueryMethod_TEXT_QUERY_METHOD_EQUALS,
+				},
+			},
+		}},
+	})
+	if err != nil {
+		return "", fmt.Errorf("list organizations on %q: %w", l.Domain, err)
+	}
+
+	for _, org := range resp.GetResult() {
+		if org.GetName() == l.OrgName {
+			return org.GetId(), nil
+		}
+	}
+	return "", fmt.Errorf("organization %q not found on instance %q", l.OrgName, l.Domain)
 }
