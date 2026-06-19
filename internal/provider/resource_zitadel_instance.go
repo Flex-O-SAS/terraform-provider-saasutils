@@ -11,10 +11,12 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
+	instancepb "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/instance"
 	systempb "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/system"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -67,8 +69,10 @@ type zitadelInstanceModel struct {
 	ID              types.String                  `tfsdk:"id"`
 	InstanceName    types.String                  `tfsdk:"instance_name"`
 	FirstOrgName    types.String                  `tfsdk:"first_org_name"`
+	FirstOrgID      types.String                  `tfsdk:"first_org_id"`
 	CustomDomain    types.String                  `tfsdk:"custom_domain"`
 	DefaultLanguage types.String                  `tfsdk:"default_language"`
+	ReadyTimeout    types.String                  `tfsdk:"ready_timeout"`
 	Human           []zitadelInstanceHumanModel   `tfsdk:"human"`
 	Machine         []zitadelInstanceMachineModel `tfsdk:"machine"`
 	PAT             types.String                  `tfsdk:"pat"`
@@ -91,6 +95,10 @@ func (r *resourceZitadelInstance) Schema(_ context.Context, _ resource.SchemaReq
 				Optional:      true,
 				PlanModifiers: replaceOnChange,
 			},
+			"first_org_id": schema.StringAttribute{
+				Computed:    true,
+				Description: "ID of the instance's first organization (named by `first_org_name`, or `instance_name` when unset), resolved after the instance reaches STATE_RUNNING. Empty when no credentials are available to query it.",
+			},
 			"custom_domain": schema.StringAttribute{
 				Optional:      true,
 				PlanModifiers: replaceOnChange,
@@ -98,6 +106,12 @@ func (r *resourceZitadelInstance) Schema(_ context.Context, _ resource.SchemaReq
 			"default_language": schema.StringAttribute{
 				Optional:      true,
 				PlanModifiers: replaceOnChange,
+			},
+			"ready_timeout": schema.StringAttribute{
+				Optional:    true,
+				Computed:    true,
+				Default:     stringdefault.StaticString("30s"),
+				Description: "Maximum time to wait for the new instance to reach STATE_RUNNING, as a Go duration (e.g. \"30s\", \"2m\"). Defaults to 30s.",
 			},
 			"pat": schema.StringAttribute{
 				Computed:    true,
@@ -273,16 +287,85 @@ func (r *resourceZitadelInstance) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
+	timeout := 30 * time.Second
+	if v := plan.ReadyTimeout.ValueString(); v != "" {
+		d, perr := time.ParseDuration(v)
+		if perr != nil {
+			resp.Diagnostics.AddError("Invalid ready_timeout", fmt.Sprintf("ready_timeout must be a Go duration (e.g. \"30s\", \"2m\"): %s", perr))
+			return
+		}
+		timeout = d
+	}
+
 	created, err := r.client.CreateInstance(ctx, body)
 	if err != nil {
 		resp.Diagnostics.AddError("Unable to create Zitadel instance", err.Error())
 		return
 	}
 
-	plan.ID = types.StringValue(created.GetInstanceId())
+	instanceID := created.GetInstanceId()
+	plan.ID = types.StringValue(instanceID)
 	plan.PAT = types.StringValue(created.GetPat())
+	plan.FirstOrgID = types.StringNull()
+
+	// Persist the created instance before the (potentially failing) wait so a
+	// timeout doesn't orphan it outside of Terraform state.
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	detail, err := r.client.WaitForInstanceRunning(ctx, instanceID, timeout)
+	if err != nil {
+		resp.Diagnostics.AddError("Zitadel instance did not become ready", err.Error())
+		return
+	}
+
+	// Resolve the first organization's id by querying the running instance.
+	orgName := plan.FirstOrgName.ValueString()
+	if orgName == "" {
+		orgName = plan.InstanceName.ValueString()
+	}
+
+	// A machine owner always yields a PAT from CreateInstance; a human owner is
+	// queried with its own credentials. One of the two is therefore always set.
+	lookup := zitadelapi.OrgLookup{
+		Domain:  instanceAPIDomain(&plan, detail),
+		OrgName: orgName,
+		PAT:     created.GetPat(),
+	}
+	if len(plan.Human) > 0 {
+		lookup.Username = plan.Human[0].UserName.ValueString()
+		lookup.Password = plan.Human[0].Password.ValueString()
+	}
+
+	orgID, err := r.client.FindOrganizationID(ctx, lookup)
+	if err != nil {
+		resp.Diagnostics.AddError("Unable to resolve first organization id", err.Error())
+		return
+	}
+	plan.FirstOrgID = types.StringValue(orgID)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+}
+
+// instanceAPIDomain picks the host used to reach the new instance's APIs:
+// the configured custom_domain when set, otherwise the instance's primary
+// (generated) domain, falling back to the first domain returned.
+func instanceAPIDomain(plan *zitadelInstanceModel, detail *instancepb.InstanceDetail) string {
+	if cd := plan.CustomDomain.ValueString(); cd != "" {
+		return cd
+	}
+	var first string
+	for _, d := range detail.GetDomains() {
+		if first == "" {
+			first = d.GetDomain()
+		}
+		if d.GetPrimary() {
+			return d.GetDomain()
+		}
+	}
+	return first
 }
 
 func (r *resourceZitadelInstance) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -306,9 +389,10 @@ func (r *resourceZitadelInstance) Read(ctx context.Context, req resource.ReadReq
 		return
 	}
 
-	// Only refresh the server-authoritative fields. Create-only inputs
-	// (first_org_name, custom_domain, default_language, human, pat) are
-	// preserved as-is — the SystemAPI doesn't expose them after creation.
+	// Only refresh the server-authoritative fields. Create-only inputs and
+	// resolved outputs (first_org_name, first_org_id, custom_domain,
+	// default_language, ready_timeout, human, pat) are preserved as-is — the
+	// SystemAPI doesn't expose them after creation.
 	state.InstanceName = types.StringValue(detail.GetName())
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
@@ -338,9 +422,11 @@ func (r *resourceZitadelInstance) Update(ctx context.Context, req resource.Updat
 		}
 	}
 
-	// Preserve id and pat across updates.
+	// Preserve id, pat and the resolved first_org_id across updates; renaming
+	// the instance doesn't change its organizations.
 	plan.ID = state.ID
 	plan.PAT = state.PAT
+	plan.FirstOrgID = state.FirstOrgID
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }

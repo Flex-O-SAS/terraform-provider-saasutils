@@ -26,9 +26,11 @@ Creates a Zitadel instance on the configured Zitadel tenant via the SystemAPI. O
 - `first_org_name` (String)
 - `human` (Block List) Human owner of the new instance. Mutually exclusive with `machine`; exactly one of the two must be set. All fields are create-only. (see [below for nested schema](#nestedblock--human))
 - `machine` (Block List) Machine (service account) owner of the new instance. Mutually exclusive with `human`; exactly one of the two must be set. All fields are create-only. (see [below for nested schema](#nestedblock--machine))
+- `ready_timeout` (String) Maximum time to wait for the new instance to reach STATE_RUNNING, as a Go duration (e.g. "30s", "2m"). Defaults to 30s.
 
 ### Read-Only
 
+- `first_org_id` (String) ID of the instance's first organization (named by `first_org_name`, or `instance_name` when unset), resolved after the instance reaches STATE_RUNNING. Empty when no credentials are available to query it.
 - `id` (String) Instance ID returned by Zitadel.
 - `pat` (String, Sensitive) Personal Access Token returned by Zitadel when creating the instance. Empty if not requested.
 
