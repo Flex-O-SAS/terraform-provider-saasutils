@@ -18,6 +18,7 @@ description: |-
 
 - `ckbox` (Block, Optional) (see [below for nested schema](#nestedblock--ckbox))
 - `gobright` (Block, Optional) (see [below for nested schema](#nestedblock--gobright))
+- `zitadel` (Block, Optional) Zitadel SystemAPI access for managing instances on a Zitadel tenant. Authenticates as a configured SystemAPIUser via JWT profile. (see [below for nested schema](#nestedblock--zitadel))
 
 <a id="nestedblock--ckbox"></a>
 ### Nested Schema for `ckbox`
@@ -40,3 +41,15 @@ Optional:
 - `login` (String)
 - `organization_code` (String)
 - `password` (String, Sensitive)
+
+
+<a id="nestedblock--zitadel"></a>
+### Nested Schema for `zitadel`
+
+Optional:
+
+- `api` (String) gRPC endpoint host:port, e.g. example.zitadel.cloud:443
+- `insecure` (Boolean) Disable TLS on the gRPC connection (local dev only)
+- `issuer` (String) OIDC issuer, e.g. https://example.zitadel.cloud
+- `key` (String, Sensitive) PEM-encoded RSA private key whose public counterpart is registered for user_id
+- `user_id` (String) SystemAPIUser id configured in Zitadel

@@ -34,3 +34,7 @@ website/vendor
 
 # Keep windows files with windows line endings
 *.winfile eol=crlf
+.claude/
+_bmad-output/
+_bmad/
+docs/bmad/

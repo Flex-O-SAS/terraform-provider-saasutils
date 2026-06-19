@@ -15,6 +15,7 @@ import (
 
 	"terraform-provider-saasutils/internal/ckboxapi"
 	"terraform-provider-saasutils/internal/gobrightapi"
+	"terraform-provider-saasutils/internal/zitadelapi"
 )
 
 var _ provider.ProviderWithFunctions = &stringFunctionsProvider{}
@@ -31,16 +32,18 @@ type stringFunctionsProvider struct {
 	data *providerData
 }
 
-// providerData bundles each sub-block's authenticated client. Either field may
-// be nil if the corresponding sub-block is absent from the provider HCL.
+// providerData bundles each sub-block's authenticated client. Any field may be
+// nil if the corresponding sub-block is absent from the provider HCL.
 type providerData struct {
 	CKBox    *ckboxapi.APIClient
 	GoBright *gobrightapi.APIClient
+	Zitadel  *zitadelapi.Client
 }
 
 type providerConfigModel struct {
 	CKBox    *ckboxConfigModel    `tfsdk:"ckbox"`
 	GoBright *gobrightConfigModel `tfsdk:"gobright"`
+	Zitadel  *zitadelConfigModel  `tfsdk:"zitadel"`
 }
 
 type ckboxConfigModel struct {
@@ -56,6 +59,14 @@ type gobrightConfigModel struct {
 	OrganizationCode types.String `tfsdk:"organization_code"`
 	Login            types.String `tfsdk:"login"`
 	Password         types.String `tfsdk:"password"`
+}
+
+type zitadelConfigModel struct {
+	Issuer   types.String `tfsdk:"issuer"`
+	API      types.String `tfsdk:"api"`
+	UserID   types.String `tfsdk:"user_id"`
+	Key      types.String `tfsdk:"key"`
+	Insecure types.Bool   `tfsdk:"insecure"`
 }
 
 func (p *stringFunctionsProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -82,6 +93,17 @@ func (p *stringFunctionsProvider) Schema(_ context.Context, _ provider.SchemaReq
 					"organization_code": schema.StringAttribute{Optional: true},
 					"login":             schema.StringAttribute{Optional: true},
 					"password":          schema.StringAttribute{Optional: true, Sensitive: true},
+				},
+			},
+			"zitadel": schema.SingleNestedBlock{
+				Description: "Zitadel SystemAPI access for managing instances on a Zitadel tenant. " +
+					"Authenticates as a configured SystemAPIUser via JWT profile.",
+				Attributes: map[string]schema.Attribute{
+					"issuer":   schema.StringAttribute{Optional: true, Description: "OIDC issuer, e.g. https://example.zitadel.cloud"},
+					"api":      schema.StringAttribute{Optional: true, Description: "gRPC endpoint host:port, e.g. example.zitadel.cloud:443"},
+					"user_id":  schema.StringAttribute{Optional: true, Description: "SystemAPIUser id configured in Zitadel"},
+					"key":      schema.StringAttribute{Optional: true, Sensitive: true, Description: "PEM-encoded RSA private key whose public counterpart is registered for user_id"},
+					"insecure": schema.BoolAttribute{Optional: true, Description: "Disable TLS on the gRPC connection (local dev only)"},
 				},
 			},
 		},
@@ -215,6 +237,74 @@ func configureGoBright(ctx context.Context, cfg *gobrightConfigModel, resp *prov
 	return client
 }
 
+// configureZitadel builds an authenticated Zitadel system client when the
+// zitadel sub-block is fully populated. It treats partial configuration as a
+// hard error.
+func configureZitadel(ctx context.Context, cfg *zitadelConfigModel, resp *provider.ConfigureResponse) *zitadelapi.Client {
+	if cfg == nil {
+		return nil
+	}
+
+	type pair struct {
+		name string
+		val  types.String
+	}
+	fields := []pair{
+		{"issuer", cfg.Issuer},
+		{"api", cfg.API},
+		{"user_id", cfg.UserID},
+		{"key", cfg.Key},
+	}
+
+	var missing []string
+	setCount := 0
+	unknownCount := 0
+	for _, f := range fields {
+		switch {
+		case f.val.IsUnknown():
+			unknownCount++
+		case isSet(f.val):
+			setCount++
+		default:
+			missing = append(missing, f.name)
+		}
+	}
+	if cfg.Insecure.IsUnknown() {
+		unknownCount++
+	}
+	// Values that are only known during apply (e.g. derived from another
+	// resource) must not be treated as missing. Configure runs again at apply
+	// time with concrete values; until then, just skip building the client.
+	if unknownCount > 0 {
+		tflog.Debug(ctx, "Zitadel configuration has unknown values, deferring client setup to apply")
+		return nil
+	}
+	if setCount == 0 {
+		return nil
+	}
+	if setCount < len(fields) {
+		resp.Diagnostics.AddError(
+			"Invalid zitadel provider configuration",
+			"All zitadel fields (issuer, api, user_id, key) must be set together. Missing: "+strings.Join(missing, ", "),
+		)
+		return nil
+	}
+
+	tflog.Debug(ctx, "Building Zitadel system client")
+	client, err := zitadelapi.NewClient(ctx, zitadelapi.Config{
+		Issuer:   cfg.Issuer.ValueString(),
+		API:      cfg.API.ValueString(),
+		UserID:   cfg.UserID.ValueString(),
+		Key:      []byte(cfg.Key.ValueString()),
+		Insecure: cfg.Insecure.ValueBool(),
+	})
+	if err != nil {
+		resp.Diagnostics.AddError("Zitadel client initialization failed", err.Error())
+		return nil
+	}
+	return client
+}
+
 func (p *stringFunctionsProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
 	var config providerConfigModel
 
@@ -232,6 +322,11 @@ func (p *stringFunctionsProvider) Configure(ctx context.Context, req provider.Co
 	}
 
 	data.GoBright = configureGoBright(ctx, config.GoBright, resp)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	data.Zitadel = configureZitadel(ctx, config.Zitadel, resp)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -260,5 +355,6 @@ func (p *stringFunctionsProvider) Resources(_ context.Context) []func() resource
 		NewCkboxEnvResource,
 		NewCkboxAccessKeyResource,
 		NewGoBrightIntegrationResource,
+		NewZitadelInstanceResource,
 	}
 }
