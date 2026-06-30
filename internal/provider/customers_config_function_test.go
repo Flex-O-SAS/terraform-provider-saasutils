@@ -23,9 +23,8 @@ func TestCustomersConfig(t *testing.T) {
 					customers = {
 						customer1 = {
 							name     = "Customer One"
-							products = ["theproduct"]
+							product  = "theproduct"
 							product_config = {
-								theproduct = {
 									features = {
 										feat1 = true
 									}
@@ -36,7 +35,6 @@ func TestCustomersConfig(t *testing.T) {
 											}
 										}
 									}
-								}
 							}
 						}
 					}
@@ -82,10 +80,8 @@ func TestCustomersConfig(t *testing.T) {
 					statecheck.ExpectKnownOutputValue("inherit_product",
 						knownvalue.MapPartial(map[string]knownvalue.Check{
 							"customer1": knownvalue.MapPartial(map[string]knownvalue.Check{
-								"theproduct": knownvalue.MapPartial(map[string]knownvalue.Check{
-									"features": knownvalue.MapPartial(map[string]knownvalue.Check{
-										"feat1": knownvalue.Bool(true),
-									}),
+								"features": knownvalue.MapPartial(map[string]knownvalue.Check{
+									"feat1": knownvalue.Bool(true),
 								}),
 							}),
 						}),
@@ -93,13 +89,11 @@ func TestCustomersConfig(t *testing.T) {
 					statecheck.ExpectKnownOutputValue("inherit_products_subfeatures",
 						knownvalue.MapPartial(map[string]knownvalue.Check{
 							"customer1": knownvalue.MapPartial(map[string]knownvalue.Check{
-								"theproduct": knownvalue.MapPartial(map[string]knownvalue.Check{
-									"feature_config": knownvalue.MapPartial(map[string]knownvalue.Check{
-										"feat1": knownvalue.MapPartial(map[string]knownvalue.Check{
-											"subfeatures": knownvalue.MapPartial(map[string]knownvalue.Check{
-												"sub1": knownvalue.Bool(false), // Customer override
-												"sub2": knownvalue.Bool(false),
-											}),
+								"feature_config": knownvalue.MapPartial(map[string]knownvalue.Check{
+									"feat1": knownvalue.MapPartial(map[string]knownvalue.Check{
+										"subfeatures": knownvalue.MapPartial(map[string]knownvalue.Check{
+											"sub1": knownvalue.Bool(false), // Customer override
+											"sub2": knownvalue.Bool(false),
 										}),
 									}),
 								}),
@@ -125,25 +119,21 @@ func TestCustomersConfigWithSecretsFrom(t *testing.T) {
 					customers = {
 						base = {
 							name     = "Base Customer"
-							products = ["theproduct"]
+							product  = "theproduct"
 							product_config = {
-								theproduct = {
 									features = {
 										feat1 = true
 									}
-								}
 							}
 						}
 						derived = {
 							name        = "Derived Customer"
-							products    = ["theproduct"]
+							product     = "theproduct"
 							secretsFrom = "base"  # Points to base for secrets only
 							product_config = {
-								theproduct = {
 									features = {
 										feat2 = true  # Only feat2, NOT feat1
 									}
-								}
 							}
 						}
 					}
@@ -182,11 +172,9 @@ func TestCustomersConfigWithSecretsFrom(t *testing.T) {
 					// secretsFrom does NOT inherit features - only feat2 should be enabled
 					statecheck.ExpectKnownOutputValue("derived_product",
 						knownvalue.MapPartial(map[string]knownvalue.Check{
-							"theproduct": knownvalue.MapPartial(map[string]knownvalue.Check{
-								"features": knownvalue.MapPartial(map[string]knownvalue.Check{
-									"feat1": knownvalue.Bool(false), // NOT inherited
-									"feat2": knownvalue.Bool(true),  // Only this one
-								}),
+							"features": knownvalue.MapPartial(map[string]knownvalue.Check{
+								"feat1": knownvalue.Bool(false), // NOT inherited
+								"feat2": knownvalue.Bool(true),  // Only this one
 							}),
 						}),
 					),
