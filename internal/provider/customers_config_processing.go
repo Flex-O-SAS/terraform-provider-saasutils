@@ -55,20 +55,13 @@ func computeProductInheritance(
 			return nil, fmt.Errorf("customer '%s' is not a map", customerKey)
 		}
 
-		customerProductsList := getList(customerMap, "products")
-		customerProductsSet := make(map[string]bool)
-		for _, p := range customerProductsList {
-			if pStr, ok := p.(string); ok {
-				customerProductsSet[pStr] = true
-			}
-		}
-
+		customerProductId := getString(customerMap, "product")
 		customerProductConfig := getMap(customerMap, "product_config")
 
-		customerProducts := make(map[string]interface{})
+		customerProduct := make(map[string]interface{})
 		for productKey, productValue := range products {
 			// Only process if this customer uses this product
-			if !customerProductsSet[productKey] {
+			if productKey != customerProductId {
 				continue
 			}
 
@@ -79,8 +72,7 @@ func computeProductInheritance(
 
 			productFeatures := getMap(productMap, "features")
 
-			customerOverride := getMap(customerProductConfig, productKey)
-			customerOverrideFeatures := getMap(customerOverride, "features")
+			customerOverrideFeatures := getMap(customerProductConfig, "features")
 
 			mergedFeatures := mergeMaps(productFeatures, customerOverrideFeatures)
 
@@ -93,14 +85,14 @@ func computeProductInheritance(
 				}
 			}
 
-			resultProduct := mergeMaps(productMap, customerOverride)
+			resultProduct := mergeMaps(productMap, customerProductConfig)
 			resultProduct["name"] = productKey
 			resultProduct["features"] = completeFeatures
 
-			customerProducts[productKey] = resultProduct
+			customerProduct = resultProduct
 		}
 
-		result[customerKey] = customerProducts
+		result[customerKey] = customerProduct
 	}
 
 	return result, nil
@@ -113,73 +105,62 @@ func computeSubfeaturesInheritance(
 ) (map[string]interface{}, error) {
 	result := make(map[string]interface{})
 
-	for customerKey, customerValue := range inheritProduct {
-		customerProducts, ok := customerValue.(map[string]interface{})
+	for customerKey, customerProduct := range inheritProduct {
+		productMap, ok := customerProduct.(map[string]interface{})
 		if !ok {
-			return nil, fmt.Errorf("customer '%s' products is not a map", customerKey)
+			return nil, fmt.Errorf("product for customer '%s' is not a map", customerKey)
 		}
 
-		resultCustomerProducts := make(map[string]interface{})
+		existingFeatureConfig := getMap(productMap, "feature_config")
 
-		for productKey, productValue := range customerProducts {
-			productMap, ok := productValue.(map[string]interface{})
+		productFeatures := getMap(productMap, "features")
+
+		newFeatureConfigEntries := make(map[string]interface{})
+
+		for featureName, featureEnabled := range productFeatures {
+			enabled, ok := featureEnabled.(bool)
+			if !ok || !enabled {
+				continue
+			}
+
+			featureDefMap, featureExists := features[featureName]
+			if !featureExists {
+				continue
+			}
+
+			featureDef, ok := featureDefMap.(map[string]interface{})
 			if !ok {
-				return nil, fmt.Errorf("product '%s' for customer '%s' is not a map", productKey, customerKey)
+				continue
 			}
 
-			existingFeatureConfig := getMap(productMap, "feature_config")
+			defaultSubfeatures := getMap(featureDef, "subfeatures")
 
-			productFeatures := getMap(productMap, "features")
-
-			newFeatureConfigEntries := make(map[string]interface{})
-
-			for featureName, featureEnabled := range productFeatures {
-				enabled, ok := featureEnabled.(bool)
-				if !ok || !enabled {
-					continue
-				}
-
-				featureDefMap, featureExists := features[featureName]
-				if !featureExists {
-					continue
-				}
-
-				featureDef, ok := featureDefMap.(map[string]interface{})
-				if !ok {
-					continue
-				}
-
-				defaultSubfeatures := getMap(featureDef, "subfeatures")
-
-				if len(defaultSubfeatures) == 0 {
-					continue
-				}
-				if !anyTrue(defaultSubfeatures) {
-					continue
-				}
-
-				existingFeatureEntry := getMap(existingFeatureConfig, featureName)
-				customerOverrideSubfeatures := getMap(existingFeatureEntry, "subfeatures")
-
-				mergedSubfeatures := mergeMaps(defaultSubfeatures, customerOverrideSubfeatures)
-
-				newFeatureEntry := mergeMaps(existingFeatureEntry, map[string]interface{}{
-					"subfeatures": mergedSubfeatures,
-				})
-
-				newFeatureConfigEntries[featureName] = newFeatureEntry
+			if len(defaultSubfeatures) == 0 {
+				continue
+			}
+			if !anyTrue(defaultSubfeatures) {
+				continue
 			}
 
-			mergedFeatureConfig := mergeMaps(existingFeatureConfig, newFeatureConfigEntries)
+			existingFeatureEntry := getMap(existingFeatureConfig, featureName)
+			customerOverrideSubfeatures := getMap(existingFeatureEntry, "subfeatures")
 
-			resultProduct := mergeMaps(productMap, map[string]interface{}{
-				"feature_config": mergedFeatureConfig,
+			mergedSubfeatures := mergeMaps(defaultSubfeatures, customerOverrideSubfeatures)
+
+			newFeatureEntry := mergeMaps(existingFeatureEntry, map[string]interface{}{
+				"subfeatures": mergedSubfeatures,
 			})
 
-			resultCustomerProducts[productKey] = resultProduct
+			newFeatureConfigEntries[featureName] = newFeatureEntry
 		}
 
-		result[customerKey] = resultCustomerProducts
+		mergedFeatureConfig := mergeMaps(existingFeatureConfig, newFeatureConfigEntries)
+
+		resultProduct := mergeMaps(productMap, map[string]interface{}{
+			"feature_config": mergedFeatureConfig,
+		})
+
+		result[customerKey] = resultProduct
 	}
 
 	return result, nil

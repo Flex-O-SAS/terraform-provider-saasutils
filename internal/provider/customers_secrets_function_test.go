@@ -30,21 +30,17 @@ func TestCustomersSecrets(t *testing.T) {
 						}
 						inherit_product = {
 							customer1 = {
-								theproduct = {
 									features = {
 										feat1 = true
 									}
-								}
 							}
 						}
 						inherit_products_subfeatures = {
 							customer1 = {
-								theproduct = {
 									features = {
 										feat1 = true
 									}
 									feature_config = {}
-								}
 							}
 						}
 					}
@@ -133,17 +129,13 @@ func TestCustomersSecretsEmptySecrets(t *testing.T) {
 						}
 						inherit_product = {
 							customer1 = {
-								theproduct = {
 									features = { feat1 = true }
-								}
 							}
 						}
 						inherit_products_subfeatures = {
 							customer1 = {
-								theproduct = {
 									features       = { feat1 = true }
 									feature_config = {}
-								}
 							}
 						}
 					}

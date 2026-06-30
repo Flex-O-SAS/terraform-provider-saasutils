@@ -12,10 +12,10 @@ func computeFeatureSecretsList(
 ) ([]interface{}, error) {
 	result := []interface{}{}
 
-	for customerKey, customerValue := range inheritProductsSubfeatures {
-		customerProducts, ok := customerValue.(map[string]interface{})
+	for customerKey, customerProduct := range inheritProductsSubfeatures {
+		productMap, ok := customerProduct.(map[string]interface{})
 		if !ok {
-			return nil, fmt.Errorf("customer '%s' products is not a map", customerKey)
+			return nil, fmt.Errorf("customer '%s' product is not a map", customerKey)
 		}
 
 		origCustomerValue, exists := inheritCustomer[customerKey]
@@ -35,89 +35,82 @@ func computeFeatureSecretsList(
 			secretCustomer = secretsFrom
 		}
 
-		for _, productValue := range customerProducts {
-			productMap, ok := productValue.(map[string]interface{})
+		productFeatures := getMap(productMap, "features")
+		productFeatureConfig := getMap(productMap, "feature_config")
+
+		for featureName, featureEnabled := range productFeatures {
+			enabled, ok := featureEnabled.(bool)
+			if !ok || !enabled {
+				continue
+			}
+
+			featureDefValue, featureExists := features[featureName]
+			if !featureExists {
+				continue
+			}
+			featureDef, ok := featureDefValue.(map[string]interface{})
 			if !ok {
 				continue
 			}
 
-			productFeatures := getMap(productMap, "features")
-			productFeatureConfig := getMap(productMap, "feature_config")
+			involvedSecrets := getMap(featureDef, "involved_secrets")
 
-			for featureName, featureEnabled := range productFeatures {
-				enabled, ok := featureEnabled.(bool)
-				if !ok || !enabled {
-					continue
-				}
-
-				featureDefValue, featureExists := features[featureName]
-				if !featureExists {
-					continue
-				}
-				featureDef, ok := featureDefValue.(map[string]interface{})
+			for secretName, secretConfigValue := range involvedSecrets {
+				secretConfig, ok := secretConfigValue.(map[string]interface{})
 				if !ok {
 					continue
 				}
 
-				involvedSecrets := getMap(featureDef, "involved_secrets")
+				fields := getList(secretConfig, "fields")
+				dependsOn := getList(secretConfig, "depends_on")
 
-				for secretName, secretConfigValue := range involvedSecrets {
-					secretConfig, ok := secretConfigValue.(map[string]interface{})
+				allDependenciesSatisfied := true
+				for _, depValue := range dependsOn {
+					depStr, ok := depValue.(string)
 					if !ok {
-						continue
+						allDependenciesSatisfied = false
+						break
 					}
 
-					fields := getList(secretConfig, "fields")
-					dependsOn := getList(secretConfig, "depends_on")
+					var subfeatureEnabled bool
 
-					allDependenciesSatisfied := true
-					for _, depValue := range dependsOn {
-						depStr, ok := depValue.(string)
+					if featureConfigEntry, hasFeatureConfig := productFeatureConfig[featureName]; hasFeatureConfig {
+						featureConfigMap, ok := featureConfigEntry.(map[string]interface{})
 						if !ok {
 							allDependenciesSatisfied = false
 							break
 						}
-
-						var subfeatureEnabled bool
-
-						if featureConfigEntry, hasFeatureConfig := productFeatureConfig[featureName]; hasFeatureConfig {
-							featureConfigMap, ok := featureConfigEntry.(map[string]interface{})
-							if !ok {
-								allDependenciesSatisfied = false
-								break
-							}
-							subfeatures := getMap(featureConfigMap, "subfeatures")
-							if val, exists := subfeatures[depStr]; exists {
-								subfeatureEnabled, _ = val.(bool)
-							} else {
-								defaultSubfeatures := getMap(featureDef, "subfeatures")
-								subfeatureEnabled = getBool(defaultSubfeatures, depStr)
-							}
+						subfeatures := getMap(featureConfigMap, "subfeatures")
+						if val, exists := subfeatures[depStr]; exists {
+							subfeatureEnabled, _ = val.(bool)
 						} else {
-							allDependenciesSatisfied = false
-							break
+							defaultSubfeatures := getMap(featureDef, "subfeatures")
+							subfeatureEnabled = getBool(defaultSubfeatures, depStr)
 						}
-
-						if !subfeatureEnabled {
-							allDependenciesSatisfied = false
-							break
-						}
+					} else {
+						allDependenciesSatisfied = false
+						break
 					}
 
-					if !allDependenciesSatisfied {
-						continue
+					if !subfeatureEnabled {
+						allDependenciesSatisfied = false
+						break
 					}
-
-					secretEntry := map[string]interface{}{
-						"customer":        customerName,
-						"feature":         featureName,
-						"secret":          secretName,
-						"fields":          fields,
-						"secret_customer": secretCustomer,
-					}
-
-					result = append(result, secretEntry)
 				}
+
+				if !allDependenciesSatisfied {
+					continue
+				}
+
+				secretEntry := map[string]interface{}{
+					"customer":        customerName,
+					"feature":         featureName,
+					"secret":          secretName,
+					"fields":          fields,
+					"secret_customer": secretCustomer,
+				}
+
+				result = append(result, secretEntry)
 			}
 		}
 	}
