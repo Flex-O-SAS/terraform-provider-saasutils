@@ -66,6 +66,19 @@ Changes to Outputs:
   + asgid-with-case = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/RG-NAME/providers/Microsoft.Network/applicationSecurityGroups/ASG-NAME"
 ```
 
+## Running CKbox example to get allowed files extensions 
+
+```
+# These two can be found in data-plane via `tofu state show -show-sensitive 'module.customer["rec"].saasutils_ckbox_access_key.customer-ckbox-access-key'`
+read -s envid
+read -s accesskey
+cd examples/functions/jwt_signed
+tofu init
+tofu apply -var "environment_id=$envid' -var "access_key=$accesskey"
+```
+
+This will output the JSON list of extensions allowed for upload in CKbox
+
 ## Building for macOS (Apple Silicon)
 
 ```powershell
