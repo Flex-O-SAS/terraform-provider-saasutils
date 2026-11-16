@@ -107,6 +107,10 @@ func (c *APIClient) CreateIntegration(ctx context.Context, body *Integration) (*
 //
 // Computed fields managed by the server (newId, oidcJwksEndpoint) are also
 // left alone — whatever Read returned is carried back.
+//
+// GoBright returns PascalCase keys (camelCase only with the
+// ForceV1ApiLowerCamelCase header), so each overlaid field replaces the key
+// that differs only by case instead of being sent twice.
 func (c *APIClient) UpdateIntegration(ctx context.Context, id int64, body *Integration) (*Integration, error) {
 	tflog.Debug(ctx, "UpdateIntegration called", map[string]any{"id": id})
 
@@ -115,16 +119,16 @@ func (c *APIClient) UpdateIntegration(ctx context.Context, id int64, body *Integ
 		return nil, err
 	}
 
-	raw["id"] = id
-	raw["name"] = body.Name
-	raw["externalSystem"] = body.ExternalSystem
-	raw["oidcAudience"] = body.OidcAudience
-	raw["oidcIssuer"] = body.OidcIssuer
-	raw["oidcValidationMode"] = body.OidcValidationMode
-	raw["oidcPublicKey"] = body.OidcPublicKey
-	raw["oidcUserIdentifierClaimName"] = body.OidcUserIdentifierClaimName
-	raw["oidcRelatedUserIntegrationId"] = body.OidcRelatedUserIntegrationId
-	raw["oidcTokenReplayPreventionMode"] = body.OidcTokenReplayPreventionMode
+	raw.set("id", id)
+	raw.set("name", body.Name)
+	raw.set("externalSystem", body.ExternalSystem)
+	raw.set("oidcAudience", body.OidcAudience)
+	raw.set("oidcIssuer", body.OidcIssuer)
+	raw.set("oidcValidationMode", body.OidcValidationMode)
+	raw.set("oidcPublicKey", body.OidcPublicKey)
+	raw.set("oidcUserIdentifierClaimName", body.OidcUserIdentifierClaimName)
+	raw.set("oidcRelatedUserIntegrationId", body.OidcRelatedUserIntegrationId)
+	raw.set("oidcTokenReplayPreventionMode", body.OidcTokenReplayPreventionMode)
 
 	if _, err := c.CallInto(ctx, http.MethodPut, "/api/integrations/", raw, nil); err != nil {
 		return nil, err

@@ -14,37 +14,41 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
 	"terraform-provider-saasutils/internal/gobrightapi"
 )
 
 // mockedIntegration is the canonical server-side representation returned by
-// the mock from GET /api/integrations/{id}. Keys are camelCase to match the
-// real GoBright API. A handful of unmodeled fields (samlEntityId, autoCreateUser,
-// ...) are included to exercise the IntegrationRaw round-trip in Update.
+// the mock from GET /api/integrations/{id}. Keys are PascalCase and the
+// public key is masked, as the real GoBright API returns them. A handful of
+// unmodeled fields (SamlEntityId, AutoCreateUser, ...) are included to
+// exercise the IntegrationRaw round-trip in Update.
 func mockedIntegration() map[string]any {
 	return map[string]any{
-		"id":                            220,
-		"newId":                         "11111111-2222-3333-4444-555555555555",
-		"name":                          "acc-test-integration",
-		"externalSystem":                14,
-		"oidcAudience":                  "https://example.gobright.cloud",
-		"oidcIssuer":                    "https://issuer.example.com/",
-		"oidcValidationMode":            1,
-		"oidcPublicKey":                 "",
-		"oidcJwksEndpoint":              "https://issuer.example.com/.well-known/jwks.json",
-		"oidcUserIdentifierClaimName":   "sub",
-		"oidcRelatedUserIntegrationId":  0,
-		"oidcTokenReplayPreventionMode": 0,
+		"Id":                            220,
+		"NewId":                         "11111111-2222-3333-4444-555555555555",
+		"Name":                          "acc-test-integration",
+		"ExternalSystem":                14,
+		"OidcAudience":                  "https://example.gobright.cloud",
+		"OidcIssuer":                    "https://issuer.example.com/",
+		"OidcValidationMode":            1,
+		"OidcPublicKey":                 "******",
+		"OidcJwksEndpoint":              "https://issuer.example.com/.well-known/jwks.json",
+		"OidcUserIdentifierClaimName":   "sub",
+		"OidcRelatedUserIntegrationId":  0,
+		"OidcTokenReplayPreventionMode": 0,
 		// Fields outside the Terraform schema — must round-trip on Update.
-		"samlEntityId":   "https://www.gobright.com/sso/11111111-2222-3333-4444-555555555555",
-		"autoCreateUser": false,
-		"exchangeAuthenticationDifferentUsername": false,
-		"microsoftPermissionMode":                 nil,
+		"SamlEntityId":   "https://www.gobright.com/sso/11111111-2222-3333-4444-555555555555",
+		"AutoCreateUser": false,
+		"ExchangeAuthenticationDifferentUsername": false,
+		"MicrosoftPermissionMode":                 nil,
 	}
 }
 
-func newGoBrightMock(t *testing.T, deleted *atomic.Bool) *httptest.Server {
+// newGoBrightMock starts a fake GoBright API. onPut, when not nil, receives
+// the decoded body of every PUT /api/integrations/.
+func newGoBrightMock(t *testing.T, deleted *atomic.Bool, onPut func(map[string]any)) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -98,7 +102,13 @@ func newGoBrightMock(t *testing.T, deleted *atomic.Bool) *httptest.Server {
 
 		// Update: PUT lives at /api/integrations/ (no id in path; id is in body).
 		case r.Method == http.MethodPut && r.URL.Path == "/api/integrations/":
-			_, _ = io.Copy(io.Discard, r.Body)
+			body := map[string]any{}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Errorf("decode PUT body: %v", err)
+			}
+			if onPut != nil {
+				onPut(body)
+			}
 			w.WriteHeader(http.StatusNoContent)
 			return
 
@@ -131,12 +141,14 @@ func newGoBrightMock(t *testing.T, deleted *atomic.Bool) *httptest.Server {
 
 func TestAccGoBrightIntegration_basic_mock(t *testing.T) {
 	var deleted atomic.Bool
-	srv := newGoBrightMock(t, &deleted)
+	var lastPut atomic.Pointer[map[string]any]
+	srv := newGoBrightMock(t, &deleted, func(body map[string]any) { lastPut.Store(&body) })
 	defer srv.Close()
 
 	resourceName := "saasutils_gobright_integration.example"
 
-	cfg := fmt.Sprintf(`
+	cfg := func(publicKey string) string {
+		return fmt.Sprintf(`
 provider "saasutils" {
   gobright {
     base_url          = "%s/"
@@ -153,13 +165,14 @@ resource "saasutils_gobright_integration" "example" {
     audience                     = "https://example.gobright.cloud"
     issuer                       = "https://issuer.example.com/"
     validation_mode              = true
-    public_key                   = ""
+    public_key                   = %q
     user_identifier_claim_name   = "sub"
     related_user_integration_id  = 0
     token_replay_prevention_mode = false
   }
 }
-`, srv.URL)
+`, srv.URL, publicKey)
+	}
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: map[string]func() (tfprotov6.ProviderServer, error){
@@ -167,16 +180,53 @@ resource "saasutils_gobright_integration" "example" {
 		},
 		Steps: []resource.TestStep{
 			{
-				Config: cfg,
+				// The API masks the public key: the state keeps the configured one.
+				Config: cfg("public-key-1"),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "id", "220"),
 					resource.TestCheckResourceAttr(resourceName, "new_id", "11111111-2222-3333-4444-555555555555"),
 					resource.TestCheckResourceAttr(resourceName, "oidc.jwks_endpoint", "https://issuer.example.com/.well-known/jwks.json"),
 					resource.TestCheckResourceAttr(resourceName, "name", "acc-test-integration"),
+					resource.TestCheckResourceAttr(resourceName, "oidc.public_key", "public-key-1"),
+				),
+			},
+			{
+				// A key rotation is pushed with a PUT that carries each field once.
+				Config: cfg("public-key-2"),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "oidc.public_key", "public-key-2"),
+					func(_ *terraform.State) error {
+						body := lastPut.Load()
+						if body == nil {
+							return fmt.Errorf("no PUT received")
+						}
+						return checkPutBody(*body, "public-key-2")
+					},
 				),
 			},
 		},
 	})
+}
+
+// checkPutBody fails when a key appears twice with a different case (the
+// server reads one of them at random) or when the public key sent is not the
+// configured one. Unmodeled fields must still be there.
+func checkPutBody(body map[string]any, publicKey string) error {
+	seen := map[string]string{}
+	for k := range body {
+		lk := strings.ToLower(k)
+		if prev, ok := seen[lk]; ok {
+			return fmt.Errorf("PUT body has duplicate keys %q and %q", prev, k)
+		}
+		seen[lk] = k
+	}
+	if got := body[seen["oidcpublickey"]]; got != publicKey {
+		return fmt.Errorf("PUT body public key = %v, want %q", got, publicKey)
+	}
+	if _, ok := seen["samlentityid"]; !ok {
+		return fmt.Errorf("PUT body lost unmodeled field SamlEntityId")
+	}
+	return nil
 }
 
 // TestGoBrightReadIntegrationNotFound verifies that a server-side 404 during

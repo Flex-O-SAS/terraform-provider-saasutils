@@ -82,7 +82,10 @@ func (r *resourceGoBrightIntegration) Schema(_ context.Context, _ resource.Schem
 						Required:    true,
 						Description: "GoBright `oidcValidationMode` projected to a boolean (false=0, true=1).",
 					},
-					"public_key":                  schema.StringAttribute{Required: true},
+					"public_key": schema.StringAttribute{
+						Required:    true,
+						Description: "PEM public key GoBright uses to verify the tokens. GoBright masks it in its responses, so the state keeps the configured value and a change made outside Terraform is not detected.",
+					},
 					"jwks_endpoint":               schema.StringAttribute{Computed: true},
 					"user_identifier_claim_name":  schema.StringAttribute{Required: true},
 					"related_user_integration_id": schema.Int64Attribute{Required: true},
@@ -155,10 +158,19 @@ func fromModel(m *goBrightIntegrationModel) (*gobrightapi.Integration, error) {
 // applyResponse merges the server-side Integration response into the given
 // state model. Allocates / overwrites the nested oidc block. Returns an
 // error if external_system is outside the set this provider models.
+//
+// The public key is never taken from the response: GoBright masks it
+// ("******"). The state keeps the value this provider sent, which is what
+// drives a key rotation. It is null after an import, so the first apply
+// pushes the configured key.
 func applyResponse(state *goBrightIntegrationModel, resp *gobrightapi.Integration) error {
 	es, err := externalSystemToString(resp.ExternalSystem)
 	if err != nil {
 		return err
+	}
+	publicKey := types.StringNull()
+	if state.Oidc != nil {
+		publicKey = state.Oidc.PublicKey
 	}
 	state.ID = types.StringValue(strconv.FormatInt(resp.Id, 10))
 	state.NewID = types.StringValue(resp.NewId)
@@ -168,7 +180,7 @@ func applyResponse(state *goBrightIntegrationModel, resp *gobrightapi.Integratio
 		Audience:                  types.StringValue(resp.OidcAudience),
 		Issuer:                    types.StringValue(resp.OidcIssuer),
 		ValidationMode:            types.BoolValue(intToBool(resp.OidcValidationMode)),
-		PublicKey:                 types.StringValue(resp.OidcPublicKey),
+		PublicKey:                 publicKey,
 		JwksEndpoint:              types.StringValue(resp.OidcJwksEndpoint),
 		UserIdentifierClaimName:   types.StringValue(resp.OidcUserIdentifierClaimName),
 		RelatedUserIntegrationId:  types.Int64Value(resp.OidcRelatedUserIntegrationId),

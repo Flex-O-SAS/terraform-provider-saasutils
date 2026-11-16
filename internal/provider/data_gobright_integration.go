@@ -82,7 +82,10 @@ func (d *dataGoBrightIntegration) Schema(_ context.Context, _ datasource.SchemaR
 						Computed:    true,
 						Description: "GoBright `oidcValidationMode` projected to a boolean (false=0, true=1).",
 					},
-					"public_key":                  schema.StringAttribute{Computed: true},
+					"public_key": schema.StringAttribute{
+						Computed:    true,
+						Description: "As returned by GoBright, which masks it (`******`).",
+					},
 					"jwks_endpoint":               schema.StringAttribute{Computed: true},
 					"user_identifier_claim_name":  schema.StringAttribute{Computed: true},
 					"related_user_integration_id": schema.Int64Attribute{Computed: true},

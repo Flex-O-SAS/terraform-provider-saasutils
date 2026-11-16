@@ -36,7 +36,7 @@ Required:
 
 - `audience` (String)
 - `issuer` (String)
-- `public_key` (String)
+- `public_key` (String) PEM public key GoBright uses to verify the tokens. GoBright masks it in its responses, so the state keeps the configured value and a change made outside Terraform is not detected.
 - `related_user_integration_id` (Number)
 - `token_replay_prevention_mode` (Boolean) GoBright `oidcTokenReplayPreventionMode` projected to a boolean (false=0, true=1).
 - `user_identifier_claim_name` (String)
