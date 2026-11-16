@@ -38,7 +38,7 @@ Read-Only:
 - `audience` (String)
 - `issuer` (String)
 - `jwks_endpoint` (String)
-- `public_key` (String)
+- `public_key` (String) As returned by GoBright, which masks it (`******`).
 - `related_user_integration_id` (Number)
 - `token_replay_prevention_mode` (Boolean) GoBright `oidcTokenReplayPreventionMode` projected to a boolean (false=0, true=1).
 - `user_identifier_claim_name` (String)

@@ -1,6 +1,9 @@
 package gobrightapi
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 // LoginReqBody is the JSON body sent to /api/users/login during stage 1 of
 // auth. authFlowId must serialize as JSON null, so we use json.RawMessage.
@@ -56,3 +59,14 @@ type Integration struct {
 // (samlEntityId, lockerVecos*, sensoringIntegration, microsoftPermissionMode,
 // ...) survive the round-trip without being nulled out.
 type IntegrationRaw map[string]any
+
+// set stores value under key after removing any key equal to it under
+// case-folding, so the JSON body never carries the same field twice.
+func (raw IntegrationRaw) set(key string, value any) {
+	for k := range raw {
+		if strings.EqualFold(k, key) {
+			delete(raw, k)
+		}
+	}
+	raw[key] = value
+}
